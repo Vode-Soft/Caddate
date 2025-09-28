@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "CaddateApp",
+    "slug": "CaddateApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Bu uygulama yakındaki kullanıcıları göstermek için konum bilginizi kullanır.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Bu uygulama yakındaki kullanıcıları göstermek için konum bilginizi kullanır."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyBTestKeyForDevelopment123456789"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBTestKeyForDevelopment123456789"
+        }
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
