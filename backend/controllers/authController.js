@@ -133,8 +133,16 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('🔐 Login request received:', { 
+      email, 
+      passwordLength: password ? password.length : 0,
+      timestamp: new Date().toISOString(),
+      body: req.body
+    });
+
     // Gerekli alanları kontrol et
     if (!email || !password) {
+      console.log('❌ Missing email or password');
       return res.status(400).json({
         success: false,
         message: 'Email ve şifre alanları zorunludur'
@@ -142,39 +150,62 @@ const login = async (req, res) => {
     }
 
     // Kullanıcıyı bul
+    console.log('🔍 Searching for user with email:', email);
     const user = await User.findByEmail(email);
     if (!user) {
+      console.log('❌ User not found');
       return res.status(401).json({
         success: false,
         message: 'Geçersiz email veya şifre'
       });
     }
 
+    console.log('✅ User found:', {
+      id: user.id,
+      email: user.email,
+      is_active: user.is_active,
+      password_exists: !!user.password,
+      password_length: user.password ? user.password.length : 0
+    });
+
     // Kullanıcı aktif mi kontrol et
     if (!user.is_active) {
+      console.log('❌ User is not active');
       return res.status(401).json({
         success: false,
         message: 'Hesabınız deaktif durumda'
       });
     }
 
-    // Email doğrulaması gerekli mi kontrol et
-    if (process.env.EMAIL_VERIFICATION_ENABLED === 'true' && !user.email_verified) {
-      return res.status(401).json({
-        success: false,
-        message: 'Email adresinizi doğrulamanız gerekiyor',
-        requires_email_verification: true
-      });
-    }
+    // Email doğrulaması kontrolü geçici olarak devre dışı
+    // if (process.env.EMAIL_VERIFICATION_ENABLED === 'true' && !user.email_verified) {
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: 'Email adresinizi doğrulamanız gerekiyor',
+    //     requires_email_verification: true
+    //   });
+    // }
 
     // Şifreyi kontrol et
+    console.log('🔐 Login attempt:', {
+      email: email,
+      inputPassword: password,
+      storedHash: user.password ? user.password.substring(0, 20) + '...' : 'null',
+      hashLength: user.password ? user.password.length : 0
+    });
+    
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log('🔐 Password comparison result:', isPasswordValid);
+    
     if (!isPasswordValid) {
+      console.log('❌ Password validation failed');
       return res.status(401).json({
         success: false,
         message: 'Geçersiz email veya şifre'
       });
     }
+    
+    console.log('✅ Password validation successful');
 
     // JWT token oluştur
     const token = generateToken(user.id, user.email);

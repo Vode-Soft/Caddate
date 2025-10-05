@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { Marker, PROVIDER_APPLE, PROVIDER_GOOGLE } from 'react-native-maps';
+// Expo Maps import'u - Expo Go uyumlu
+import { MapView, Marker, Circle } from 'expo-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -661,10 +662,7 @@ export default function MapScreen() {
   }, [location]);
 
   const toggleMapType = () => {
-    const mapTypes = ['standard', 'satellite', 'hybrid'];
-    const currentIndex = mapTypes.indexOf(mapType);
-    const nextIndex = (currentIndex + 1) % mapTypes.length;
-    setMapType(mapTypes[nextIndex]);
+    setMapType(mapType === 'standard' ? 'satellite' : 'standard');
   };
 
   const handleUserLocationUpdate = useCallback((data) => {
@@ -800,7 +798,10 @@ export default function MapScreen() {
     );
   };
 
-
+  const handleUserMarkerPress = (user) => {
+    console.log('User marker pressed:', user);
+    // Kullanıcı marker'ına tıklandığında yapılacak işlemler
+  };
 
 
 
@@ -866,14 +867,13 @@ export default function MapScreen() {
           </View>
         </Animated.View>
 
-        {/* Map - Apple Maps (iOS) / Google Maps (Android) */}
+        {/* Map - Expo Go Uyumlu */}
         <View style={styles.map}>
           <MapView
             ref={mapRef}
             style={styles.mapView}
-            provider={Platform.OS === 'ios' ? PROVIDER_APPLE : PROVIDER_GOOGLE}
             mapType={mapType}
-            region={region}
+            initialRegion={region}
             showsUserLocation={true}
             showsMyLocationButton={false}
             showsCompass={true}
@@ -881,58 +881,166 @@ export default function MapScreen() {
             showsBuildings={true}
             showsTraffic={false}
             showsIndoors={true}
-            onRegionChangeComplete={setRegion}
+            onRegionChangeComplete={(region) => {
+              setRegion(region);
+            }}
             onMapReady={() => {
-              console.log('🗺️ Map is ready');
-              if (location) {
-                centerOnUserLocation();
-              }
+              console.log('Expo Maps ready');
+              setMapError(null);
+            }}
+            onError={(error) => {
+              console.error('Expo Maps error:', error);
+              setMapError('Harita yüklenirken hata oluştu');
             }}
           >
-            {/* Kullanıcının kendi konumu */}
-            {location && (
-              <Marker
-                coordinate={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                }}
-                title="Sizin Konumunuz"
-                description={`Doğruluk: ${Math.round(locationAccuracy || 0)}m`}
-                pinColor={colors.primary}
-              >
-                <View style={styles.userMarker}>
-                  <Ionicons name="person" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                </View>
-              </Marker>
-            )}
-
-            {/* Yakındaki diğer kullanıcılar */}
-            {nearbyUsers.map((user, index) => {
-              if (!user.location || !user.location.latitude || !user.location.longitude) {
-                return null;
-              }
-              
-              return (
+              {/* Kullanıcının kendi konumu */}
+              {location && location.latitude && location.longitude && (
                 <Marker
-                  key={user.userId || index}
                   coordinate={{
-                    latitude: parseFloat(user.location.latitude),
-                    longitude: parseFloat(user.location.longitude),
+                    latitude: location.latitude,
+                    longitude: location.longitude,
                   }}
-                  title={`${user.firstName || user.first_name || 'Kullanıcı'} ${user.lastName || user.last_name || ''}`}
-                  description={
-                    user.distance 
-                      ? `${Math.round(user.distance)}m uzaklıkta` 
-                      : 'Yakında'
-                  }
-                  pinColor={colors.secondary}
+                  title="Konumunuz"
+                  description={`Doğruluk: ${locationAccuracy ? Math.round(locationAccuracy) : 'N/A'}m`}
+                  pinColor={colors.primary}
                 >
-                  <View style={styles.otherUserMarker}>
-                    <Ionicons name="person" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                  <View style={styles.userMarker}>
+                    <Ionicons name="person" size={isTablet ? 24 : 20} color="#FFFFFF" />
                   </View>
                 </Marker>
-              );
-            })}
+              )}
+
+
+              {/* Diğer kullanıcıların konumları */}
+              {nearbyUsers.map((user, index) => {
+                // Sadece geçerli konum verilerine sahip kullanıcıları göster
+                if (!user.location || !user.location.latitude || !user.location.longitude) {
+                  return null;
+                }
+                
+                console.log(`📍 User ${index} data:`, {
+                  userId: user.userId,
+                  firstName: user.firstName,
+                  first_name: user.first_name,
+                  lastName: user.lastName,
+                  last_name: user.last_name,
+                  location: user.location
+                });
+                
+                return (
+                  <Marker
+                    key={user.userId}
+                    coordinate={{
+                      latitude: user.location.latitude,
+                      longitude: user.location.longitude,
+                    }}
+                    title={`${user.firstName || user.first_name || `Kullanıcı ${index + 1}`} ${user.lastName || user.last_name || ''}`}
+                    description={`${user.distance ? `${Math.round(user.distance)}m uzaklıkta` : 'Yakında'} • ${user.isOnline ? 'Çevrimiçi' : `Son görülme: ${new Date(user.lastSeen).toLocaleTimeString()}`}`}
+                    pinColor={colors.secondary}
+                  >
+                    <View style={styles.otherUserMarker}>
+                      <Ionicons name="person" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                    </View>
+                  </Marker>
+                );
+              })}
+
+              {/* Kullanıcının konum doğruluğu için daire */}
+              {location && location.latitude && location.longitude && locationAccuracy && (
+                <Circle
+                  center={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  radius={locationAccuracy}
+                  strokeColor={colors.primary + '40'}
+                  fillColor={colors.primary + '20'}
+                  strokeWidth={2}
+                />
+              )}
+            </MapView>
+          ) : (
+            // Android: Google Maps
+            <MapView
+              ref={mapRef}
+              style={styles.mapView}
+              provider={PROVIDER_GOOGLE}
+              mapType={mapType}
+              initialRegion={region}
+              showsUserLocation={true}
+              showsMyLocationButton={false}
+              showsCompass={true}
+              showsScale={true}
+              showsBuildings={true}
+              showsTraffic={false}
+              showsIndoors={true}
+              onMapReady={() => {
+                console.log('Android Google Maps ready');
+                setMapError(null);
+              }}
+              onError={(error) => {
+                console.error('Android Maps error:', error);
+                setMapError('Harita yüklenirken hata oluştu');
+              }}
+              onRegionChangeComplete={(region) => {
+                setRegion(region);
+              }}
+            >
+              {/* Kullanıcının kendi konumu */}
+              {location && (
+                <Marker
+                  coordinate={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  title="Sizin Konumunuz"
+                  description="Mevcut konumunuz"
+                  pinColor="blue"
+                >
+                  <View style={styles.userMarker}>
+                    <Ionicons name="person" size={20} color="white" />
+                  </View>
+                </Marker>
+              )}
+
+              {/* Konum doğruluğu dairesi */}
+              {location && locationAccuracy && (
+                <Circle
+                  center={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  radius={locationAccuracy}
+                  strokeColor={colors.primary + '40'}
+                  fillColor={colors.primary + '20'}
+                  strokeWidth={2}
+                />
+              )}
+
+              {/* Yakındaki kullanıcılar */}
+              {nearbyUsers.map((user) => (
+                <Marker
+                  key={user.userId || user.id}
+                  coordinate={{
+                    latitude: user.location_latitude,
+                    longitude: user.location_longitude,
+                  }}
+                  title={`${user.first_name} ${user.last_name}`}
+                  description={`${user.distance?.toFixed(0) || 0} metre uzaklıkta`}
+                  onPress={() => handleUserMarkerPress(user)}
+                >
+                  <View style={styles.nearbyUserMarker}>
+                    {user.profile_picture ? (
+                      <Image
+                        source={{ uri: user.profile_picture }}
+                        style={styles.userMarkerImage}
+                      />
+                    ) : (
+                      <Ionicons name="person" size={16} color="white" />
+                    )}
+                  </View>
+                </Marker>
+              ))}
           </MapView>
         </View>
 
@@ -978,11 +1086,7 @@ export default function MapScreen() {
             onPress={toggleMapType}
           >
             <Ionicons
-              name={
-                mapType === 'standard' ? 'map' : 
-                mapType === 'satellite' ? 'globe' : 
-                'layers'
-              }
+              name={mapType === 'standard' ? 'map' : 'globe'}
               size={isTablet ? 28 : 24}
               color={colors.primary}
             />
@@ -1426,101 +1530,80 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  // iOS Map Container
-  iosMapContainer: {
-    flex: 1,
+  // Android placeholder styles
+  androidPlaceholder: {
     backgroundColor: colors.background,
-  },
-  // Android Map Container
-  androidMapContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  mapPlaceholder: {
-    flex: 1,
-    padding: scale(20),
     justifyContent: 'center',
     alignItems: 'center',
   },
-  mapPlaceholderTitle: {
+  placeholderContent: {
+    alignItems: 'center',
+    paddingHorizontal: getResponsivePadding(40),
+  },
+  placeholderTitle: {
     fontSize: scaleFont(24),
     fontWeight: 'bold',
     color: colors.text.primary,
     marginTop: verticalScale(20),
     marginBottom: verticalScale(10),
-    textAlign: 'center',
   },
-  mapPlaceholderSubtitle: {
-    fontSize: scaleFont(18),
+  placeholderSubtitle: {
+    fontSize: scaleFont(16),
     color: colors.text.secondary,
-    marginBottom: verticalScale(10),
     textAlign: 'center',
-    fontWeight: '600',
+    marginBottom: verticalScale(20),
+    lineHeight: scaleFont(22),
   },
-  mapPlaceholderInfo: {
+  placeholderInfo: {
     fontSize: scaleFont(14),
     color: colors.text.tertiary,
-    marginBottom: verticalScale(30),
     textAlign: 'center',
-    lineHeight: scaleFont(20),
-  },
-  locationInfo: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: scale(15),
-    padding: scale(20),
-    marginBottom: verticalScale(20),
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: verticalScale(10),
-  },
-  locationText: {
-    fontSize: scaleFont(16),
-    color: colors.text.primary,
-    marginLeft: scale(10),
-    flex: 1,
-  },
-  nearbyUsersInfo: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: scale(15),
-    padding: scale(20),
-    marginBottom: verticalScale(20),
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  nearbyUsersTitle: {
-    fontSize: scaleFont(18),
-    fontWeight: 'bold',
-    color: colors.text.primary,
-    marginBottom: verticalScale(15),
-  },
-  nearbyUserItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: verticalScale(8),
-    paddingVertical: verticalScale(5),
   },
-  nearbyUserName: {
+  placeholderButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: getResponsivePadding(24),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(25),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: verticalScale(20),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  placeholderButtonText: {
+    color: '#FFFFFF',
     fontSize: scaleFont(16),
-    color: colors.text.primary,
-    marginLeft: scale(10),
-    flex: 1,
-  },
-  nearbyUserDistance: {
-    fontSize: scaleFont(14),
-    color: colors.text.secondary,
     fontWeight: '600',
+    marginLeft: scale(8),
   },
-  moreUsersText: {
-    fontSize: scaleFont(14),
-    color: colors.text.tertiary,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: verticalScale(5),
+  nearbyUserMarker: {
+    width: scale(isTablet ? 40 : 30),
+    height: scale(isTablet ? 40 : 30),
+    borderRadius: scale(isTablet ? 20 : 15),
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: isTablet ? 3 : 2,
+    borderColor: '#FFFFFF',
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  userMarkerImage: {
+    width: scale(isTablet ? 36 : 26),
+    height: scale(isTablet ? 36 : 26),
+    borderRadius: scale(isTablet ? 18 : 13),
   },
 });

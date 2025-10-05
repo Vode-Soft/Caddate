@@ -26,7 +26,7 @@ class EmailVerification {
     const query = `
       SELECT * FROM email_verifications 
       WHERE email = $1 AND verification_code = $2 AND code_type = $3 
-      AND is_used = false AND expires_at > NOW()
+      AND used = false AND expires_at > NOW()
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -44,7 +44,7 @@ class EmailVerification {
     const query = `
       SELECT * FROM email_verifications 
       WHERE user_id = $1 AND code_type = $2 
-      AND is_used = false AND expires_at > NOW()
+      AND used = false AND expires_at > NOW()
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -61,7 +61,7 @@ class EmailVerification {
   static async markAsUsed(id) {
     const query = `
       UPDATE email_verifications 
-      SET is_used = true
+      SET used = true
       WHERE id = $1
       RETURNING id, email, code_type
     `;
@@ -78,8 +78,8 @@ class EmailVerification {
   static async clearUserCodes(user_id, code_type = 'registration') {
     const query = `
       UPDATE email_verifications 
-      SET is_used = true
-      WHERE user_id = $1 AND code_type = $2 AND is_used = false
+      SET used = true
+      WHERE user_id = $1 AND code_type = $2 AND used = false
     `;
     
     try {
@@ -94,7 +94,7 @@ class EmailVerification {
   static async cleanupExpiredCodes() {
     const query = `
       DELETE FROM email_verifications 
-      WHERE expires_at < NOW() AND is_used = false
+      WHERE expires_at < NOW() AND used = false
     `;
     
     try {

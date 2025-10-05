@@ -30,13 +30,16 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
       ],
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBTestKeyForDevelopment123456789"
         }
-      }
+      },
+      "package": "com.ker1m.CaddateApp"
     },
     "web": {
       "favicon": "./assets/favicon.png"

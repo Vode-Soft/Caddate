@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Platform, Dimensions, View, TouchableOpacity, Text } from 'react-native';
+import { Platform, Dimensions, View, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { scale, verticalScale, getBottomSafeArea, isIOS, isAndroid } from '../utils/responsive';
 import { colors } from '../constants/colors';
 import GlobalMenu from '../components/GlobalMenu';
@@ -178,32 +178,47 @@ export default function AppNavigator() {
 
   const checkAuthentication = async () => {
     try {
-      // AsyncStorage'dan token'ı al
-      const token = await apiService.getStoredToken();
+      // Timeout ekle - 5 saniye sonra loading'i durdur
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Authentication timeout')), 5000);
+      });
       
-      if (token) {
-        // Token'ı API servisine set et
-        apiService.setToken(token);
+      const authPromise = async () => {
+        // Token süresi kontrolü yap
+        const tokenValid = await apiService.refreshTokenIfNeeded();
         
-        // Token'ı doğrula - profil endpoint'ini kullan
-        const response = await apiService.verifyToken();
-        
-        if (response.success) {
-          setIsAuthenticated(true);
+        if (tokenValid) {
+          // Token geçerli, doğrula
+          const response = await apiService.verifyToken();
+          
+          if (response.success) {
+            setIsAuthenticated(true);
+          } else {
+            // Token geçersizse temizle
+            apiService.clearToken();
+            setIsAuthenticated(false);
+          }
         } else {
-          // Token geçersizse temizle
+          // Token süresi dolmuş veya geçersiz
           apiService.clearToken();
           setIsAuthenticated(false);
         }
-      } else {
-        setIsAuthenticated(false);
-      }
+      };
+      
+      // Race between auth check and timeout
+      await Promise.race([authPromise(), timeoutPromise]);
+      
     } catch (error) {
       console.error('Auth check error:', error);
       
-      // Token geçersizse kullanıcıyı bilgilendir
-      if (error.message.includes('Token geçersiz') || error.message.includes('Geçersiz token')) {
-        console.log('Token geçersiz, kullanıcı login sayfasına yönlendiriliyor');
+      // Timeout veya diğer hatalar için login'e yönlendir
+      if (error.message.includes('timeout') || error.message.includes('Network request failed')) {
+        console.log('Authentication timeout or network error, redirecting to login');
+      }
+      
+      // Token geçersizse veya süresi dolmuşsa kullanıcıyı bilgilendir
+      if (error.message.includes('Token geçersiz') || error.message.includes('Geçersiz token') || error.message.includes('Token süresi dolmuş')) {
+        console.log('Token geçersiz veya süresi dolmuş, kullanıcı login sayfasına yönlendiriliyor');
       }
       
       // Hata durumunda token'ı temizle ve login'e yönlendir
@@ -220,7 +235,14 @@ export default function AppNavigator() {
   };
 
   if (isLoading) {
-    return null; // Loading screen burada gösterilebilir
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ color: colors.text.primary, marginTop: 16, fontSize: 16 }}>
+          Yükleniyor...
+        </Text>
+      </View>
+    );
   }
 
   return (

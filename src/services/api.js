@@ -8,7 +8,11 @@ const getApiBaseUrl = () => {
   if (__DEV__) {
     // Telefon/emülatör için gerçek IP adresini kullan
     console.log('Development mode - using network IP API');
-    return 'http://192.168.1.2:3000/api';
+    
+    // Backend sunucusunun çalıştığı doğru IP adresini kullan
+    const serverIP = '192.168.1.9'; // Telefon için gerçek IP adresi
+    console.log(`Using server IP: ${serverIP}`);
+    return `http://${serverIP}:3000/api`;
   }
   // Production için
   return 'https://your-production-api.com/api';
@@ -60,6 +64,78 @@ class ApiService {
     }
   }
 
+  // Token süresini kontrol et
+  isTokenExpired(token) {
+    if (!token) return true;
+    
+    try {
+      // JWT token'ı decode et (base64)
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      const expirationTime = payload.exp;
+      
+      // Token'ın süresi 5 dakika kala yenile
+      const refreshThreshold = 5 * 60; // 5 dakika
+      const timeUntilExpiry = expirationTime - currentTime;
+      
+      console.log('🕐 Token süresi kontrolü:', {
+        currentTime: new Date(currentTime * 1000).toLocaleString(),
+        expirationTime: new Date(expirationTime * 1000).toLocaleString(),
+        timeUntilExpiry: Math.floor(timeUntilExpiry / 60) + ' dakika',
+        needsRefresh: timeUntilExpiry < refreshThreshold
+      });
+      
+      return timeUntilExpiry < 0; // Süresi dolmuş mu?
+    } catch (error) {
+      console.error('Token decode hatası:', error);
+      return true; // Hata durumunda token'ı geçersiz say
+    }
+  }
+
+  // Token'ı otomatik yenile
+  async refreshTokenIfNeeded() {
+    try {
+      const token = await this.getStoredToken();
+      
+      if (!token) {
+        // Token bulunamadı, yenileme atlanıyor (normal durum)
+        return false;
+      }
+      
+      // Token süresi kontrolü
+      if (this.isTokenExpired(token)) {
+        console.log('🔄 Token süresi dolmuş, temizleniyor');
+        await this.removeStoredToken();
+        this.clearToken();
+        return false;
+      }
+      
+      // Token'ı decode et ve süre kontrolü yap
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      const expirationTime = payload.exp;
+      const refreshThreshold = 5 * 60; // 5 dakika
+      const timeUntilExpiry = expirationTime - currentTime;
+      
+      if (timeUntilExpiry < refreshThreshold && timeUntilExpiry > 0) {
+        console.log('🔄 Token yenileme gerekli, yenileme yapılıyor...');
+        
+        // Backend'de refresh endpoint'i yoksa, kullanıcıyı login'e yönlendir
+        console.log('⚠️ Token yenileme endpoint\'i bulunamadı, kullanıcı login\'e yönlendirilecek');
+        await this.removeStoredToken();
+        this.clearToken();
+        return false;
+      }
+      
+      return true; // Token geçerli
+    } catch (error) {
+      console.error('Token yenileme hatası:', error);
+      await this.removeStoredToken();
+      this.clearToken();
+      return false;
+    }
+  }
+
   // Token'ı AsyncStorage'dan sil
   async removeStoredToken() {
     try {
@@ -67,6 +143,28 @@ class ApiService {
       this.token = null;
     } catch (error) {
       console.error('Token silme hatası:', error);
+    }
+  }
+
+  // Bağlantı test fonksiyonu
+  async testConnection() {
+    try {
+      console.log('🔍 API bağlantısı test ediliyor...');
+      const response = await fetch(`${this.baseURL.replace('/api', '')}/health`, {
+        method: 'GET',
+        timeout: 5000
+      });
+      
+      if (response.ok) {
+        console.log('✅ API bağlantısı başarılı');
+        return true;
+      } else {
+        console.log('❌ API bağlantısı başarısız:', response.status);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ API bağlantı testi başarısız:', error.message);
+      return false;
     }
   }
 
@@ -80,6 +178,24 @@ class ApiService {
       if (storedToken) {
         this.token = storedToken;
       }
+    }
+    
+    // Token süresi kontrolü (login ve register endpoint'leri hariç)
+    if (endpoint !== '/auth/login' && endpoint !== '/auth/register') {
+      console.log('🔍 Token kontrolü yapılıyor...', { endpoint, hasToken: !!this.token });
+      
+      // Eğer token yoksa ve bu auth endpoint'i değilse, token kontrolü yapma
+      if (!this.token) {
+        console.log('⚠️ Token yok, istek devam ediyor...');
+      } else {
+        const tokenValid = await this.refreshTokenIfNeeded();
+        if (!tokenValid) {
+          console.log('⚠️ Token geçersiz, istek iptal ediliyor');
+          throw new Error('Token süresi dolmuş, lütfen yeniden giriş yapın');
+        }
+      }
+    } else {
+      console.log('✅ Auth endpoint, token kontrolü atlanıyor:', endpoint);
     }
     
     const config = {
@@ -176,6 +292,10 @@ class ApiService {
 
   // Auth API'leri
   async register(userData) {
+    // Kayıt öncesi eski token'ı temizle
+    await this.removeStoredToken();
+    this.clearToken();
+    
     const response = await this.post('/auth/register', userData);
     
     // Başarılı kayıtta token'ı kaydet
@@ -187,6 +307,10 @@ class ApiService {
   }
 
   async login(email, password) {
+    // Login öncesi eski token'ı temizle
+    await this.removeStoredToken();
+    this.clearToken();
+    
     const response = await this.post('/auth/login', { email, password });
     
     // Başarılı girişte token'ı kaydet
