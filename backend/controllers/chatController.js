@@ -1,14 +1,4 @@
-const { Pool } = require('pg');
-require('dotenv').config({ path: './config.env' });
-
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT || 5432,
-});
+const { pool } = require('../config/database');
 
 // Mesaj geçmişini getir
 const getMessageHistory = async (req, res) => {
@@ -68,18 +58,27 @@ const getMessageHistory = async (req, res) => {
 
     const result = await pool.query(query, params);
     
+    // Tam URL oluştur
+    const protocol = req.protocol;
+    const host = req.get('host');
+    
     // Mesajları formatla
-    const messages = result.rows.map(row => ({
-      id: row.id,
-      senderId: row.sender_id,
-      senderName: `${row.first_name} ${row.last_name}`,
-      senderEmail: row.first_name, // Geçici olarak
-      message: row.message,
-      messageType: row.message_type,
-      isRead: row.is_read,
-      timestamp: row.created_at,
-      profilePicture: row.profile_picture
-    }));
+    const messages = result.rows.map(row => {
+      const profilePictureUrl = row.profile_picture ? `${protocol}://${host}${row.profile_picture}` : null;
+      console.log(`💬 ChatHistory - User: ${row.first_name} ${row.last_name} - Profile Picture URL:`, profilePictureUrl);
+      
+      return {
+        id: row.id,
+        senderId: row.sender_id,
+        senderName: `${row.first_name} ${row.last_name}`,
+        senderEmail: row.first_name, // Geçici olarak
+        message: row.message,
+        messageType: row.message_type,
+        isRead: row.is_read,
+        timestamp: row.created_at,
+        profilePicture: profilePictureUrl
+      };
+    });
 
     res.json({
       success: true,
@@ -411,11 +410,15 @@ const getPrivateConversations = async (req, res) => {
     
     console.log('Query result:', result.rows);
     
+    // Tam URL oluştur
+    const protocol = req.protocol;
+    const host = req.get('host');
+
     // Konuşmaları formatla
     const conversations = result.rows.map(row => ({
       friendId: row.friend_id,
       friendName: `${row.first_name} ${row.last_name}`,
-      profilePicture: row.profile_picture,
+      profilePicture: row.profile_picture ? `${protocol}://${host}${row.profile_picture}` : null,
       lastMessage: row.last_message || 'Henüz mesaj yok',
       lastMessageTime: row.last_message_time,
       unreadCount: 0 // Geçici olarak 0

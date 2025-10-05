@@ -1,109 +1,214 @@
-# Harita Kurulumu - CaddateApp
+# 🗺️ Harita Entegrasyonu Kurulum Rehberi
 
-## 🗺️ Harita Servisleri
+## 📋 Genel Bakış
 
-Bu uygulama platform bazlı harita servisleri kullanır:
-- **iOS**: Apple Maps (ücretsiz)
-- **Android**: Google Maps (API key gerekli)
+Bu proje, platform-specific harita entegrasyonu kullanır:
+- **iOS**: Apple Maps (MapKit JS)
+- **Android**: Google Maps (WebView)
 
-## 🔑 Google Maps API Key Kurulumu
+## 🔧 Kurulum Adımları
 
-### 1. Google Cloud Console'a Giriş
-1. [Google Cloud Console](https://console.cloud.google.com/) adresine gidin
-2. Google hesabınızla giriş yapın
-3. Yeni proje oluşturun veya mevcut projeyi seçin
+### 1. Google Maps API Anahtarı (Android için)
 
-### 2. Maps API'lerini Etkinleştirin
-1. Sol menüden "APIs & Services" > "Library" seçin
-2. Aşağıdaki API'leri arayın ve etkinleştirin:
-   - **Maps SDK for Android**
-   - **Maps SDK for iOS** (opsiyonel)
-   - **Places API** (opsiyonel)
-   - **Geocoding API** (opsiyonel)
+1. [Google Cloud Console](https://console.cloud.google.com/)'a gidin
+2. Yeni proje oluşturun veya mevcut projeyi seçin
+3. "APIs & Services" > "Credentials" bölümüne gidin
+4. "Create Credentials" > "API Key" seçin
+5. API anahtarınızı kopyalayın
 
-### 3. API Key Oluşturun
-1. "APIs & Services" > "Credentials" seçin
-2. "Create Credentials" > "API Key" tıklayın
-3. API key'inizi kopyalayın
+### 2. API Anahtarını Yapılandırma
 
-### 4. API Key'i Uygulamaya Ekleyin
-1. `app.json` dosyasını açın
-2. `YOUR_GOOGLE_MAPS_API_KEY_HERE` yerine gerçek API key'inizi yazın:
+`src/components/WebMapView.js` dosyasında aşağıdaki satırı bulun:
 
-```json
-{
-  "expo": {
-    "plugins": [
-      [
-        "expo-maps",
-        {
-          "googleMapsApiKey": "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        }
-      ]
-    ]
+```javascript
+const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY'; // Bu anahtarı değiştirin
+```
+
+Kendi API anahtarınızla değiştirin:
+
+```javascript
+const GOOGLE_MAPS_API_KEY = 'AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+```
+
+### 3. Gerekli API'leri Etkinleştirme
+
+Google Cloud Console'da aşağıdaki API'leri etkinleştirin:
+- Maps JavaScript API
+- Places API (opsiyonel)
+- Geocoding API (opsiyonel)
+
+### 4. Güvenlik Ayarları
+
+API anahtarınızı güvenli hale getirmek için:
+
+1. **HTTP referrers (web sitesi)** kısıtlaması ekleyin
+2. **Android uygulamaları** kısıtlaması ekleyin (SHA-1 fingerprint ile)
+3. **iOS uygulamaları** kısıtlaması ekleyin (Bundle ID ile)
+
+## 🚀 Kullanım
+
+### Temel Kullanım
+
+```javascript
+import PlatformMapView from '../components/PlatformMapView';
+
+<PlatformMapView
+  ref={mapRef}
+  style={{ flex: 1 }}
+  region={region}
+  markers={markers}
+  onRegionChange={handleRegionChange}
+  onMapReady={handleMapReady}
+  mapType="standard"
+  showsUserLocation={true}
+  showsCompass={true}
+  showsScale={true}
+/>
+```
+
+### Marker Ekleme
+
+```javascript
+const markers = [
+  {
+    id: 'user',
+    coordinate: {
+      latitude: 40.9884,
+      longitude: 29.0255,
+    },
+    title: 'Sizin Konumunuz',
+    description: 'Doğruluk: 5m'
+  },
+  {
+    id: 'friend1',
+    coordinate: {
+      latitude: 40.9894,
+      longitude: 29.0265,
+    },
+    title: 'Ahmet Yılmaz',
+    description: '150m uzaklıkta'
   }
-}
+];
 ```
 
-### 5. API Key Güvenliği (Önerilen)
-- API key'inizi sadece gerekli platformlarda kısıtlayın
-- Android uygulaması için package name kısıtlaması ekleyin
-- Günlük kullanım limitleri belirleyin
+### Harita Türü Değiştirme
 
-## 🚀 Test Etme
+```javascript
+const [mapType, setMapType] = useState('standard');
 
-### Development Modunda
-```bash
-# Android için
-npx expo run:android
-
-# iOS için
-npx expo run:ios
+// Kullanılabilir türler:
+// - 'standard' (varsayılan)
+// - 'satellite' (uydu)
+// - 'hybrid' (hibrit)
 ```
 
-### Production Build
-```bash
-# Android APK
-npx expo build:android
+## 🔧 Gelişmiş Yapılandırma
 
-# iOS IPA
-npx expo build:ios
+### Android WebView Ayarları
+
+`src/components/WebMapView.js` dosyasında WebView özelliklerini özelleştirebilirsiniz:
+
+```javascript
+<WebView
+  source={{ html: generateMapHTML() }}
+  style={{ flex: 1 }}
+  onMessage={handleWebViewMessage}
+  javaScriptEnabled={true}
+  domStorageEnabled={true}
+  startInLoadingState={true}
+  scalesPageToFit={false}
+  scrollEnabled={false}
+  bounces={false}
+  showsHorizontalScrollIndicator={false}
+  showsVerticalScrollIndicator={false}
+/>
 ```
 
-## 📱 Platform Özellikleri
+### iOS Apple Maps Ayarları
+
+`src/components/AppleMapView.js` dosyasında MapKit ayarlarını özelleştirebilirsiniz:
+
+```javascript
+const mapOptions = {
+  center: new mapkit.Coordinate(lat, lng),
+  region: new mapkit.CoordinateRegion(center, span),
+  mapType: 'standard', // 'standard', 'satellite', 'hybrid'
+  showsUserLocation: true,
+  showsBuildings: true,
+  showsTraffic: false,
+  showsPointsOfInterest: true,
+  showsCompass: true,
+  showsScale: true
+};
+```
+
+## 🐛 Sorun Giderme
+
+### Yaygın Sorunlar
+
+1. **"Google Maps API key not found" hatası**
+   - API anahtarınızı kontrol edin
+   - API'lerin etkin olduğundan emin olun
+
+2. **"Apple Maps not loading" hatası**
+   - İnternet bağlantınızı kontrol edin
+   - MapKit JS yüklenme durumunu kontrol edin
+
+3. **Marker'lar görünmüyor**
+   - Marker koordinatlarını kontrol edin
+   - Harita bölgesini kontrol edin
+
+### Debug Modu
+
+Geliştirme sırasında console log'larını aktifleştirin:
+
+```javascript
+// WebView'da console log'ları görmek için
+const handleWebViewMessage = (event) => {
+  console.log('WebView Message:', event.nativeEvent.data);
+  // ... diğer kodlar
+};
+```
+
+## 📱 Platform Farkları
 
 ### iOS (Apple Maps)
-- ✅ Ücretsiz kullanım
 - ✅ Yerel Apple Maps entegrasyonu
-- ✅ Siri entegrasyonu
-- ✅ Offline harita desteği
+- ✅ Daha iyi performans
+- ✅ iOS native görünüm
+- ❌ Sadece iOS'ta çalışır
 
-### Android (Google Maps)
-- ✅ Zengin harita özellikleri
-- ✅ Trafik bilgisi
-- ✅ Street View
-- ✅ Google Places entegrasyonu
+### Android (Google Maps WebView)
+- ✅ Google Maps'in tüm özellikleri
+- ✅ Cross-platform uyumluluk
+- ✅ Zengin API desteği
+- ❌ WebView tabanlı (native değil)
 
-## 🔧 Sorun Giderme
+## 🔒 Güvenlik
 
-### Yaygın Hatalar
+1. **API Anahtarı Güvenliği**
+   - API anahtarınızı public repository'de paylaşmayın
+   - Environment variables kullanın
+   - Kısıtlamalar ekleyin
 
-1. **"RNMapsAirModule could not be found"**
-   - Çözüm: `react-native-maps` yerine `expo-maps` kullanın
+2. **Rate Limiting**
+   - API kullanım limitlerini kontrol edin
+   - Gereksiz istekleri önleyin
 
-2. **"Google Maps API key not found"**
-   - Çözüm: `app.json` dosyasında API key'i kontrol edin
+## 📚 Ek Kaynaklar
 
-3. **"Location permission denied"**
-   - Çözüm: Cihaz ayarlarından konum iznini etkinleştirin
+- [Google Maps JavaScript API](https://developers.google.com/maps/documentation/javascript)
+- [Apple MapKit JS](https://developer.apple.com/documentation/mapkitjs)
+- [React Native WebView](https://github.com/react-native-webview/react-native-webview)
 
-4. **Harita yüklenmiyor**
-   - Çözüm: İnternet bağlantısını kontrol edin
-   - API key'in doğru olduğundan emin olun
+## 🤝 Katkıda Bulunma
 
-## 📞 Destek
+1. Fork yapın
+2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Commit yapın (`git commit -m 'Add amazing feature'`)
+4. Push yapın (`git push origin feature/amazing-feature`)
+5. Pull Request oluşturun
 
-Sorun yaşıyorsanız:
-1. Expo dokümantasyonunu kontrol edin
-2. Google Maps API dokümantasyonunu inceleyin
-3. GitHub issues bölümünde sorun bildirin
+## 📄 Lisans
+
+Bu proje MIT lisansı altında lisanslanmıştır.

@@ -1,13 +1,4 @@
-const { Pool } = require('pg');
-
-// Veritabanı bağlantısı
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
+const { pool } = require('../config/database');
 
 // Bildirimleri getir
 const getNotifications = async (req, res) => {
@@ -346,6 +337,234 @@ const sendNotification = async (notificationId) => {
   }
 };
 
+// Push token kaydet
+const registerPushToken = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { pushToken, deviceType, deviceId } = req.body;
+    
+    if (!pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Push token gerekli'
+      });
+    }
+
+    // Push token tablosunu oluştur (eğer yoksa)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        push_token TEXT NOT NULL,
+        device_type VARCHAR(20),
+        device_id VARCHAR(100),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, push_token)
+      )
+    `);
+
+    // Mevcut token'ı kontrol et
+    const existingToken = await pool.query(
+      'SELECT id FROM push_tokens WHERE user_id = $1 AND push_token = $2',
+      [userId, pushToken]
+    );
+
+    if (existingToken.rows.length > 0) {
+      // Token zaten mevcut, güncelle
+      await pool.query(
+        'UPDATE push_tokens SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [existingToken.rows[0].id]
+      );
+    } else {
+      // Yeni token ekle
+      await pool.query(
+        'INSERT INTO push_tokens (user_id, push_token, device_type, device_id) VALUES ($1, $2, $3, $4)',
+        [userId, pushToken, deviceType, deviceId]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Push token başarıyla kaydedildi'
+    });
+
+  } catch (error) {
+    console.error('Register push token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Push token kaydedilirken hata oluştu'
+    });
+  }
+};
+
+// Push notification gönder
+const sendPushNotification = async (req, res) => {
+  try {
+    const { userId, title, body, data = {} } = req.body;
+
+    if (!userId || !title || !body) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId, title ve body gerekli'
+      });
+    }
+
+    // Kullanıcının push token'ını al
+    const userResult = await pool.query(
+      'SELECT push_token FROM users WHERE id = $1 AND push_token IS NOT NULL',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kullanıcı bulunamadı veya push token yok'
+      });
+    }
+
+    const pushToken = userResult.rows[0].push_token;
+
+    // Expo push notification gönder
+    const message = {
+      to: pushToken,
+      sound: 'default',
+      title: title,
+      body: body,
+      data: data,
+      badge: 1
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+
+    if (result.data && result.data[0] && result.data[0].status === 'ok') {
+      // Bildirimi veritabanına kaydet
+      await createNotification({
+        user_id: userId,
+        type: 'push',
+        title: title,
+        message: body,
+        data: JSON.stringify(data)
+      });
+
+      res.json({
+        success: true,
+        message: 'Push notification gönderildi',
+        data: result
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Push notification gönderilemedi',
+        error: result
+      });
+    }
+
+  } catch (error) {
+    console.error('Push notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Push notification gönderilirken hata oluştu',
+      error: error.message
+    });
+  }
+};
+
+// Toplu push notification gönder
+const sendBulkPushNotification = async (req, res) => {
+  try {
+    const { userIds, title, body, data = {} } = req.body;
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0 || !title || !body) {
+      return res.status(400).json({
+        success: false,
+        message: 'userIds (array), title ve body gerekli'
+      });
+    }
+
+    // Kullanıcıların push token'larını al
+    const placeholders = userIds.map((_, index) => `$${index + 1}`).join(',');
+    const userResult = await pool.query(
+      `SELECT id, push_token FROM users WHERE id IN (${placeholders}) AND push_token IS NOT NULL`,
+      userIds
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Hiçbir kullanıcı bulunamadı veya push token yok'
+      });
+    }
+
+    // Her kullanıcı için push notification hazırla
+    const messages = userResult.rows.map(user => ({
+      to: user.push_token,
+      sound: 'default',
+      title: title,
+      body: body,
+      data: { ...data, userId: user.id },
+      badge: 1
+    }));
+
+    // Expo push notification gönder
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+
+    const result = await response.json();
+
+    // Başarılı gönderimleri say
+    const successCount = result.data ? result.data.filter(item => item.status === 'ok').length : 0;
+
+    // Bildirimleri veritabanına kaydet
+    for (const user of userResult.rows) {
+      await createNotification({
+        user_id: user.id,
+        type: 'push',
+        title: title,
+        message: body,
+        data: JSON.stringify({ ...data, userId: user.id })
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `${successCount}/${userResult.rows.length} push notification gönderildi`,
+      data: {
+        total: userResult.rows.length,
+        success: successCount,
+        failed: userResult.rows.length - successCount,
+        details: result
+      }
+    });
+
+  } catch (error) {
+    console.error('Bulk push notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Toplu push notification gönderilirken hata oluştu',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getNotifications,
   markAsRead,
@@ -354,5 +573,8 @@ module.exports = {
   deleteReadNotifications,
   getNotificationStats,
   createNotification,
-  sendNotification
+  sendNotification,
+  registerPushToken,
+  sendPushNotification,
+  sendBulkPushNotification
 };

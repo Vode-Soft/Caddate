@@ -24,6 +24,9 @@ import SettingsScreen from '../screens/SettingsScreen';
 import SecurityScreen from '../screens/SecurityScreen';
 import ConfessionScreen from '../screens/ConfessionScreen';
 import NotificationCenterScreen from '../screens/NotificationCenterScreen';
+import SubscriptionScreen from '../screens/SubscriptionScreen';
+import HelpSupportScreen from '../screens/HelpSupportScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -269,6 +272,15 @@ export default function AppNavigator() {
           </Stack.Screen>
           <Stack.Screen name="PrivateChat">
             {(props) => <PrivateChatScreen {...props} />}
+          </Stack.Screen>
+          <Stack.Screen name="Subscription">
+            {(props) => <SubscriptionScreen {...props} />}
+          </Stack.Screen>
+          <Stack.Screen name="HelpSupport">
+            {(props) => <HelpSupportScreen {...props} />}
+          </Stack.Screen>
+          <Stack.Screen name="About">
+            {(props) => <AboutScreen {...props} />}
           </Stack.Screen>
         </>
       ) : (

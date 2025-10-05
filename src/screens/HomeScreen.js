@@ -293,6 +293,13 @@ export default function HomeScreen() {
                     uri: userInfo?.profile_picture || 'https://picsum.photos/120/120?random=profile' 
                   }}
                   style={styles.modalProfileImage}
+                  onError={(error) => {
+                    console.log('HomeScreen: Image load error:', error.nativeEvent.error);
+                    console.log('HomeScreen: Failed URL:', userInfo?.profile_picture);
+                  }}
+                  onLoad={() => {
+                    console.log('HomeScreen: Image loaded successfully:', userInfo?.profile_picture);
+                  }}
                 />
                 <Text style={styles.modalUserName}>
                   {userInfo ? `${userInfo.first_name} ${userInfo.last_name}` : 'Kullanıcı'}

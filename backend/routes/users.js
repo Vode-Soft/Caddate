@@ -1,6 +1,7 @@
 const express = require('express');
 const { 
-  getProfile, 
+  getProfile,
+  getUserProfile, 
   updateProfile, 
   deleteAccount, 
   discoverUsers, 
@@ -28,6 +29,9 @@ router.use(authenticateToken);
 // GET /api/users/profile - Kendi profili getir
 router.get('/profile', getProfile);
 
+// GET /api/users/profile/:userId - Belirli bir kullanıcının profilini getir
+router.get('/profile/:userId', getUserProfile);
+
 // PUT /api/users/profile - Profili güncelle
 router.put('/profile', updateProfile);
 
@@ -44,7 +48,21 @@ router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
 
 // POST /api/users/profile-picture - Profil fotoğrafı yükle
-router.post('/profile-picture', upload.single('profile_picture'), uploadProfilePicture);
+router.post('/profile-picture', (req, res, next) => {
+  console.log('📸 Route - Profile picture upload request received');
+  console.log('📸 Route - Content-Type:', req.headers['content-type']);
+  console.log('📸 Route - Content-Length:', req.headers['content-length']);
+  next();
+}, upload.single('profile_picture'), (err, req, res, next) => {
+  if (err) {
+    console.error('📸 Route - Multer error:', err);
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'Dosya yükleme hatası'
+    });
+  }
+  next();
+}, uploadProfilePicture);
 
 // GET /api/users/search - Kullanıcı ara
 router.get('/search', searchUsers);

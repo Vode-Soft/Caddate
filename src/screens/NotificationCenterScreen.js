@@ -240,6 +240,108 @@ export default function NotificationCenterScreen({ navigation }) {
     );
   };
 
+  const sendTestNotification = async () => {
+    try {
+      const success = await notificationService.sendTestNotification();
+      if (success) {
+        Alert.alert('Başarılı', 'Test bildirimi gönderildi!');
+      } else {
+        Alert.alert('Hata', 'Test bildirimi gönderilemedi');
+      }
+    } catch (error) {
+      console.error('Test bildirimi gönderilirken hata:', error);
+      Alert.alert('Hata', 'Test bildirimi gönderilirken bir hata oluştu');
+    }
+  };
+
+  // Arkadaşlık isteğini kabul et
+  const acceptFriendRequest = async (notification) => {
+    try {
+      console.log('🔍 Arkadaşlık isteği kabul ediliyor:', notification);
+      
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      // Notification data'sından senderId'yi al
+      const senderId = notification.data?.senderId;
+      if (!senderId) {
+        Alert.alert('Hata', 'Gönderen kullanıcı bilgisi bulunamadı.');
+        return;
+      }
+      
+      const response = await apiService.acceptFriendRequest(senderId);
+      
+      if (response.success) {
+        console.log('✅ Arkadaşlık isteği kabul edildi');
+        
+        // Bildirimi okundu olarak işaretle
+        await markAsRead(notification.id);
+        
+        // Bildirimi listeden kaldır
+        setNotifications(prev => prev.filter(notif => notif.id !== notification.id));
+        
+        // İstatistikleri güncelle
+        loadStats();
+        
+        Alert.alert('Başarılı', 'Arkadaşlık isteği kabul edildi!');
+      } else {
+        Alert.alert('Hata', response.message || 'Arkadaşlık isteği kabul edilirken bir hata oluştu.');
+      }
+    } catch (error) {
+      console.error('❌ Arkadaşlık isteği kabul etme hatası:', error);
+      Alert.alert('Hata', 'Arkadaşlık isteği kabul edilirken bir hata oluştu.');
+    }
+  };
+
+  // Arkadaşlık isteğini reddet
+  const declineFriendRequest = async (notification) => {
+    try {
+      console.log('🔍 Arkadaşlık isteği reddediliyor:', notification);
+      
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      // Notification data'sından senderId'yi al
+      const senderId = notification.data?.senderId;
+      if (!senderId) {
+        Alert.alert('Hata', 'Gönderen kullanıcı bilgisi bulunamadı.');
+        return;
+      }
+      
+      const response = await apiService.declineFriendRequest(senderId);
+      
+      if (response.success) {
+        console.log('✅ Arkadaşlık isteği reddedildi');
+        
+        // Bildirimi okundu olarak işaretle
+        await markAsRead(notification.id);
+        
+        // Bildirimi listeden kaldır
+        setNotifications(prev => prev.filter(notif => notif.id !== notification.id));
+        
+        // İstatistikleri güncelle
+        loadStats();
+        
+        Alert.alert('Başarılı', 'Arkadaşlık isteği reddedildi.');
+      } else {
+        Alert.alert('Hata', response.message || 'Arkadaşlık isteği reddedilirken bir hata oluştu.');
+      }
+    } catch (error) {
+      console.error('❌ Arkadaşlık isteği reddetme hatası:', error);
+      Alert.alert('Hata', 'Arkadaşlık isteği reddedilirken bir hata oluştu.');
+    }
+  };
+
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'friend_request':
@@ -300,28 +402,30 @@ export default function NotificationCenterScreen({ navigation }) {
   };
 
   const renderNotification = ({ item }) => (
-    <TouchableOpacity
+    <View
       style={[
         styles.notificationItem,
         !item.isRead && styles.unreadNotification
       ]}
-      onPress={() => !item.isRead && markAsRead(item.id)}
-      onLongPress={() => {
-        Alert.alert(
-          'Bildirim',
-          'Bu bildirimi silmek istediğinizden emin misiniz?',
-          [
-            { text: 'İptal', style: 'cancel' },
-            {
-              text: 'Sil',
-              style: 'destructive',
-              onPress: () => deleteNotification(item.id)
-            }
-          ]
-        );
-      }}
     >
-      <View style={styles.notificationContent}>
+      <TouchableOpacity
+        style={styles.notificationContent}
+        onPress={() => !item.isRead && markAsRead(item.id)}
+        onLongPress={() => {
+          Alert.alert(
+            'Bildirim',
+            'Bu bildirimi silmek istediğinizden emin misiniz?',
+            [
+              { text: 'İptal', style: 'cancel' },
+              {
+                text: 'Sil',
+                style: 'destructive',
+                onPress: () => deleteNotification(item.id)
+              }
+            ]
+          );
+        }}
+      >
         <View style={styles.iconContainer}>
           <Ionicons
             name={getNotificationIcon(item.type)}
@@ -348,8 +452,29 @@ export default function NotificationCenterScreen({ navigation }) {
         {!item.isRead && (
           <View style={styles.unreadDot} />
         )}
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+
+      {/* Arkadaşlık istekleri için kabul/reddet butonları */}
+      {item.type === 'friend_request' && !item.isRead && (
+        <View style={styles.friendRequestActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.acceptButton]}
+            onPress={() => acceptFriendRequest(item)}
+          >
+            <Ionicons name="checkmark" size={scale(16)} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Kabul Et</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.declineButton]}
+            onPress={() => declineFriendRequest(item)}
+          >
+            <Ionicons name="close" size={scale(16)} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Reddet</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   const renderHeader = () => (
@@ -375,12 +500,21 @@ export default function NotificationCenterScreen({ navigation }) {
             )}
           </View>
           
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowFilterModal(true)}
-          >
-            <Ionicons name="filter" size={scale(24)} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={sendTestNotification}
+            >
+              <Ionicons name="notifications" size={scale(20)} color="#FFFFFF" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => setShowFilterModal(true)}
+            >
+              <Ionicons name="filter" size={scale(24)} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.actionButtons}>
@@ -556,6 +690,16 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: verticalScale(2),
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  testButton: {
+    padding: scale(8),
+    borderRadius: scale(20),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
   filterButton: {
     padding: scale(8),
     borderRadius: scale(20),
@@ -581,6 +725,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: scaleFont(14),
     fontWeight: '600',
+  },
+  friendRequestActions: {
+    flexDirection: 'row',
+    paddingHorizontal: getResponsivePadding(16),
+    paddingBottom: verticalScale(16),
+    gap: scale(12),
+  },
+  acceptButton: {
+    backgroundColor: '#4CAF50',
+  },
+  declineButton: {
+    backgroundColor: '#F44336',
   },
   notificationsList: {
     flexGrow: 1,

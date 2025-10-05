@@ -81,6 +81,67 @@ export default function ChatScreen({ navigation }) {
     loadCurrentUser();
   }, []);
 
+  // API entegrasyonu için mesaj gönderme fonksiyonu
+  const sendMessageToAPI = async (message, room = 'general', receiverId = null) => {
+    try {
+      console.log('API ile mesaj gönderiliyor:', { message, room, receiverId });
+      
+      let response;
+      if (receiverId) {
+        // Özel mesaj
+        response = await apiService.sendPrivateMessage(message, receiverId);
+      } else {
+        // Genel mesaj
+        response = await apiService.post('/chat/send', {
+          message: message,
+          room: room
+        });
+      }
+      
+      if (response.success) {
+        console.log('Mesaj API ile başarıyla gönderildi:', response.data);
+        return response.data;
+      } else {
+        console.error('Mesaj gönderme hatası:', response.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('API mesaj gönderme hatası:', error);
+      return null;
+    }
+  };
+
+  // API'den mesaj geçmişini yükle
+  const loadMessageHistory = async (room = 'general', friendId = null) => {
+    try {
+      console.log('Mesaj geçmişi yükleniyor:', { room, friendId });
+      
+      let response;
+      if (friendId) {
+        // Özel mesaj geçmişi
+        response = await apiService.getPrivateMessageHistory(friendId, 50, 0);
+      } else {
+        // Genel mesaj geçmişi
+        response = await apiService.get('/chat/history', {
+          room: room,
+          limit: 50,
+          offset: 0
+        });
+      }
+      
+      if (response.success) {
+        console.log('Mesaj geçmişi yüklendi:', response.data);
+        return response.data;
+      } else {
+        console.error('Mesaj geçmişi yükleme hatası:', response.message);
+        return [];
+      }
+    } catch (error) {
+      console.error('API mesaj geçmişi hatası:', error);
+      return [];
+    }
+  };
+
 
   const handleOnlineUsersList = useCallback((users) => {
     console.log('ChatScreen: Online kullanıcı listesi alındı:', users);
@@ -158,10 +219,12 @@ export default function ChatScreen({ navigation }) {
     };
   }, [handleConnectionError, handleConnectionStatus, handleOnlineUsersList, handleUserJoined, handleUserLeft]);
 
-  // Component unmount olduğunda socket bağlantısını kapat
+  // Component unmount olduğunda socket bağlantısını kapatma
+  // Socket bağlantısı global olarak yönetiliyor
   useEffect(() => {
     return () => {
-      socketService.disconnect();
+      console.log('🔌 ChatScreen: Component unmount, socket bağlantısı açık bırakılıyor');
+      // socketService.disconnect(); // Bu satırı kaldırdık
     };
   }, []);
 
@@ -210,14 +273,25 @@ export default function ChatScreen({ navigation }) {
         
         const users = response.data
           .filter(user => !friendIds.includes(user.id)) // Zaten arkadaş olanları filtrele
-          .map(user => ({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            avatar: '👤',
-            mutualFriends: user.mutualFriendsCount || 0,
-            isFriend: false,
-          }));
+          .map(user => {
+            // Profil fotoğrafı URL'sini tam URL'ye çevir
+            let profilePictureUrl = user.profilePicture || user.profile_picture || null;
+            if (profilePictureUrl && profilePictureUrl.startsWith('/uploads/')) {
+              // API base URL'ini al ve profil fotoğrafı URL'sini tamamla
+              const apiBaseUrl = apiService.baseURL.replace('/api', '');
+              profilePictureUrl = `${apiBaseUrl}${profilePictureUrl}`;
+            }
+            
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              avatar: '👤', // Fallback avatar
+              mutualFriends: user.mutualFriendsCount || 0,
+              isFriend: false,
+              profilePicture: profilePictureUrl,
+            };
+          });
         setSearchResults(users);
       } else {
         setSearchResults([]);
@@ -234,14 +308,21 @@ export default function ChatScreen({ navigation }) {
   // Arkadaş ekleme fonksiyonu (arkadaşlık isteği gönder)
   const addFriend = async (user) => {
     try {
+      console.log('🔍 Arkadaş ekleme başlatıldı:', user);
+      
       const token = await apiService.getStoredToken();
+      console.log('🔍 Token kontrolü:', token ? 'Token mevcut' : 'Token yok');
+      
       if (!token) {
         Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
         return;
       }
       
       apiService.setToken(token);
+      console.log('🔍 API servisine istek gönderiliyor:', user.id);
+      
       const response = await apiService.addFriend(user.id);
+      console.log('🔍 API yanıtı:', response);
       
       if (response.success) {
         // Gönderilen istekler listesine ekle
@@ -309,11 +390,34 @@ export default function ChatScreen({ navigation }) {
   };
 
   // Profil görüntüleme fonksiyonu
-  const viewProfile = (friend) => {
+  const viewProfile = async (friend) => {
     console.log('=== VIEW PROFILE CALLED ===');
     console.log('Selected friend:', friend);
     setSelectedFriend(friend);
     setShowProfilePopup(true);
+    
+    // Arkadaşın araç bilgilerini yükle
+    await loadFriendVehicleInfo(friend.id);
+  };
+
+  // Arkadaşın araç bilgilerini yükle
+  const loadFriendVehicleInfo = async (friendId) => {
+    try {
+      const token = await apiService.getStoredToken();
+      if (!token) return;
+      
+      apiService.setToken(token);
+      const response = await apiService.getFriendVehicles(friendId);
+      
+      if (response.success) {
+        setSelectedFriend(prev => ({
+          ...prev,
+          vehicles: response.data.vehicles || []
+        }));
+      }
+    } catch (error) {
+      console.error('Arkadaş araç bilgileri yükleme hatası:', error);
+    }
   };
 
   // Arkadaş listesini yükle
@@ -342,17 +446,27 @@ export default function ChatScreen({ navigation }) {
       
       if (response.success && response.data && response.data.friends) {
         console.log('Arkadaş listesi API yanıtı:', response.data.friends);
-        const friends = response.data.friends.map(friend => ({
-          id: friend.id,
-          name: `${friend.firstName} ${friend.lastName}`,
-          email: friend.email,
-          status: 'offline',
-          lastSeen: 'Bilinmiyor',
-          avatar: '👤',
-          mutualFriends: 0,
-          age: friend.age || 'Bilinmiyor',
-          profilePicture: friend.profilePicture || null,
-        }));
+        const friends = response.data.friends.map(friend => {
+          // Profil fotoğrafı URL'sini tam URL'ye çevir
+          let profilePictureUrl = friend.profilePicture || friend.profile_picture || null;
+          if (profilePictureUrl && profilePictureUrl.startsWith('/uploads/')) {
+            // API base URL'ini al ve profil fotoğrafı URL'sini tamamla
+            const apiBaseUrl = apiService.baseURL.replace('/api', '');
+            profilePictureUrl = `${apiBaseUrl}${profilePictureUrl}`;
+          }
+          
+          return {
+            id: friend.id,
+            name: `${friend.firstName} ${friend.lastName}`,
+            email: friend.email,
+            status: 'offline',
+            lastSeen: 'Çevrimdışı',
+            avatar: '👤', // Fallback avatar
+            mutualFriends: 0,
+            age: friend.age || null,
+            profilePicture: profilePictureUrl,
+          };
+        });
         console.log('İşlenmiş arkadaş listesi:', friends);
         setFriends(friends);
         console.log('setFriends called with:', friends);
@@ -383,18 +497,28 @@ export default function ChatScreen({ navigation }) {
       
       console.log('Private conversations API response:', response);
       if (response.success && response.data) {
-        const chats = response.data.map(chat => ({
-          id: chat.friendId,
-          name: chat.friendName,
-          lastMessage: chat.lastMessage || 'Henüz mesaj yok',
-          time: chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString('tr-TR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }) : 'Şimdi',
-          unread: chat.unreadCount || 0,
-          avatar: '👤',
-          profilePicture: chat.profilePicture
-        }));
+        const chats = response.data.map(chat => {
+          // Profil fotoğrafı URL'sini tam URL'ye çevir
+          let profilePictureUrl = chat.profilePicture || null;
+          if (profilePictureUrl && profilePictureUrl.startsWith('/uploads/')) {
+            // API base URL'ini al ve profil fotoğrafı URL'sini tamamla
+            const apiBaseUrl = apiService.baseURL.replace('/api', '');
+            profilePictureUrl = `${apiBaseUrl}${profilePictureUrl}`;
+          }
+          
+          return {
+            id: chat.friendId,
+            name: chat.friendName,
+            lastMessage: chat.lastMessage || 'Henüz mesaj yok',
+            time: chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString('tr-TR', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }) : 'Şimdi',
+            unread: chat.unreadCount || 0,
+            avatar: '👤', // Fallback avatar
+            profilePicture: profilePictureUrl
+          };
+        });
         
         console.log('İşlenmiş özel sohbet listesi:', chats);
         setPrivateChats(chats);
@@ -497,6 +621,18 @@ export default function ChatScreen({ navigation }) {
     loadPrivateChats();
   }, []);
 
+  // Screen'e odaklanıldığında arkadaş listesini yeniden yükle
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('=== CHAT SCREEN FOCUSED ===');
+      console.log('Screen focused - arkadaş listesi yeniden yükleniyor...');
+      loadFriends();
+      loadFriendRequests();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   // Arkadaş listesi değiştiğinde log
   useEffect(() => {
     console.log('Friends state changed:', friends);
@@ -533,7 +669,22 @@ export default function ChatScreen({ navigation }) {
       }}
     >
       <View style={styles.chatAvatar}>
-        <Text style={styles.chatAvatarText}>{item.avatar}</Text>
+        {item.profilePicture ? (
+          <Image 
+            source={{ uri: item.profilePicture }} 
+            style={styles.chatAvatarImage}
+            defaultSource={require('../../assets/icon.png')}
+            onError={(error) => {
+              console.log('📸 ChatScreen: Image load error:', error.nativeEvent.error);
+              console.log('📸 ChatScreen: Failed URL:', item.profilePicture);
+            }}
+            onLoad={() => {
+              console.log('📸 ChatScreen: Image loaded successfully:', item.profilePicture);
+            }}
+          />
+        ) : (
+          <Text style={styles.chatAvatarText}>{item.avatar}</Text>
+        )}
         {item.unread > 0 && (
           <View style={styles.unreadBadge}>
             <Text style={styles.unreadText}>{item.unread}</Text>
@@ -558,7 +709,22 @@ export default function ChatScreen({ navigation }) {
       onPress={() => viewProfile(item)}
     >
       <View style={styles.friendAvatar}>
-        <Text style={styles.friendAvatarText}>{item.avatar}</Text>
+        {item.profilePicture ? (
+          <Image 
+            source={{ uri: item.profilePicture }} 
+            style={styles.friendAvatarImage}
+            defaultSource={require('../../assets/icon.png')}
+            onError={(error) => {
+              console.log('👥 ChatScreen: Friend image load error:', error.nativeEvent.error);
+              console.log('👥 ChatScreen: Failed URL:', item.profilePicture);
+            }}
+            onLoad={() => {
+              console.log('👥 ChatScreen: Friend image loaded successfully:', item.profilePicture);
+            }}
+          />
+        ) : (
+          <Text style={styles.friendAvatarText}>{item.avatar}</Text>
+        )}
         <View style={[
           styles.statusIndicator,
           { backgroundColor: getStatusColor(item.status) }
@@ -606,7 +772,15 @@ export default function ChatScreen({ navigation }) {
     return (
       <TouchableOpacity style={styles.searchResultItem}>
         <View style={styles.searchResultAvatar}>
-          <Text style={styles.searchResultAvatarText}>{item.avatar}</Text>
+          {item.profilePicture ? (
+            <Image 
+              source={{ uri: item.profilePicture }} 
+              style={styles.searchResultAvatarImage}
+              defaultSource={require('../../assets/icon.png')}
+            />
+          ) : (
+            <Text style={styles.searchResultAvatarText}>{item.avatar}</Text>
+          )}
         </View>
         <View style={styles.searchResultContent}>
           <View style={styles.searchResultHeader}>
@@ -924,14 +1098,13 @@ export default function ChatScreen({ navigation }) {
       {showProfilePopup && (
         <View style={styles.popupOverlay}>
           <View style={styles.profilePopup}>
-            {/* Header */}
-            <View style={styles.popupHeader}>
-              <Text style={styles.popupTitle}>Profil</Text>
+            {/* Gradient Header */}
+            <View style={styles.popupGradientHeader}>
               <TouchableOpacity 
                 style={styles.popupCloseButton}
                 onPress={() => setShowProfilePopup(false)}
               >
-                <Ionicons name="close" size={getResponsiveIconSize(24)} color={colors.text.primary} />
+                <Ionicons name="close" size={getResponsiveIconSize(24)} color={colors.text.light} />
               </TouchableOpacity>
             </View>
 
@@ -939,42 +1112,118 @@ export default function ChatScreen({ navigation }) {
             <View style={styles.popupContent}>
               {/* Profil Fotoğrafı */}
               <View style={styles.popupImageContainer}>
-                {selectedFriend?.profilePicture ? (
-                  <Image
-                    source={{ uri: `http://192.168.1.2:3000${selectedFriend.profilePicture}` }}
-                    style={styles.popupProfileImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.popupDefaultImage}>
-                    <Ionicons name="person" size={getResponsiveIconSize(50)} color={colors.text.secondary} />
-                  </View>
-                )}
+                <View style={styles.popupImageWrapper}>
+                  {selectedFriend?.profilePicture ? (
+                    <Image
+                      source={{ uri: selectedFriend.profilePicture }}
+                      style={styles.popupProfileImage}
+                      resizeMode="cover"
+                      onError={(error) => {
+                        console.log('👥 ChatScreen Popup: Image load error:', error.nativeEvent.error);
+                        console.log('👥 ChatScreen Popup: Failed URL:', selectedFriend.profilePicture);
+                      }}
+                      onLoad={() => {
+                        console.log('👥 ChatScreen Popup: Image loaded successfully:', selectedFriend.profilePicture);
+                      }}
+                    />
+                  ) : (
+                    <View style={styles.popupDefaultImage}>
+                      <Ionicons name="person" size={getResponsiveIconSize(60)} color={colors.text.light} />
+                    </View>
+                  )}
+                  {/* Durum İndikatörü */}
+                  <View style={[
+                    styles.popupStatusBadge,
+                    { backgroundColor: getStatusColor(selectedFriend?.status) }
+                  ]} />
+                </View>
               </View>
 
               {/* Kullanıcı Bilgileri */}
               <View style={styles.popupInfo}>
                 <Text style={styles.popupName}>{selectedFriend?.name}</Text>
                 
-                {/* Yaş Bilgisi */}
-                <View style={styles.popupAgeContainer}>
-                  <Ionicons name="calendar" size={getResponsiveIconSize(18)} color={colors.primary} />
-                  <Text style={styles.popupAgeText}>
-                    {selectedFriend?.age ? `${selectedFriend.age} yaşında` : 'Yaş bilgisi yok'}
-                  </Text>
+                {/* Bilgi Kartları */}
+                <View style={styles.popupInfoCards}>
+                  {/* Yaş Bilgisi */}
+                  <View style={styles.popupInfoCard}>
+                    <View style={styles.popupInfoIconContainer}>
+                      <Ionicons name="calendar-outline" size={getResponsiveIconSize(20)} color={colors.primary} />
+                    </View>
+                    <View style={styles.popupInfoTextContainer}>
+                      <Text style={styles.popupInfoLabel}>Yaş</Text>
+                      <Text style={styles.popupInfoValue}>
+                        {selectedFriend?.age ? `${selectedFriend.age}` : 'Belirtilmemiş'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Durum Bilgisi */}
+                  <View style={styles.popupInfoCard}>
+                    <View style={styles.popupInfoIconContainer}>
+                      <Ionicons name="time-outline" size={getResponsiveIconSize(20)} color={colors.secondary} />
+                    </View>
+                    <View style={styles.popupInfoTextContainer}>
+                      <Text style={styles.popupInfoLabel}>Durum</Text>
+                      <Text style={styles.popupInfoValue}>
+                        {selectedFriend?.status === 'online' ? 'Çevrimiçi' : 'Çevrimdışı'}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
+                {/* Ortak Arkadaşlar */}
+                {selectedFriend?.mutualFriends > 0 && (
+                  <View style={styles.popupMutualFriends}>
+                    <Ionicons name="people-outline" size={getResponsiveIconSize(16)} color={colors.text.secondary} />
+                    <Text style={styles.popupMutualText}>
+                      {selectedFriend.mutualFriends} ortak arkadaş
+                    </Text>
+                  </View>
+                )}
 
-                {/* Durum Bilgisi */}
-                <View style={styles.popupStatusContainer}>
-                  <View style={[
-                    styles.popupStatusIndicator,
-                    { backgroundColor: getStatusColor(selectedFriend?.status) }
-                  ]} />
-                  <Text style={styles.popupStatusText}>
-                    {selectedFriend?.status === 'online' ? 'Çevrimiçi' : 'Çevrimdışı'}
-                  </Text>
-                </View>
+                {/* Araç Bilgileri */}
+                {selectedFriend?.vehicles && selectedFriend.vehicles.length > 0 && (
+                  <View style={styles.popupVehiclesSection}>
+                    <Text style={styles.popupVehiclesTitle}>Araç Bilgileri</Text>
+                    {selectedFriend.vehicles.slice(0, 2).map((vehicle, index) => (
+                      <View key={vehicle.id || index} style={styles.popupVehicleCard}>
+                        <View style={styles.popupVehicleHeader}>
+                          <View style={styles.popupVehicleIconContainer}>
+                            <Ionicons name="car-outline" size={getResponsiveIconSize(18)} color={colors.primary} />
+                          </View>
+                          <View style={styles.popupVehicleInfo}>
+                            <Text style={styles.popupVehicleBrandModel}>
+                              {vehicle.brand} {vehicle.model}
+                            </Text>
+                            <Text style={styles.popupVehiclePlate}>
+                              {vehicle.plate_number}
+                            </Text>
+                          </View>
+                          {vehicle.is_primary && (
+                            <View style={styles.popupPrimaryBadge}>
+                              <Text style={styles.popupPrimaryText}>Ana</Text>
+                            </View>
+                          )}
+                        </View>
+                        {(vehicle.year || vehicle.color) && (
+                          <View style={styles.popupVehicleDetails}>
+                            {vehicle.year && (
+                              <Text style={styles.popupVehicleDetail}>
+                                {vehicle.year} • {vehicle.color}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                    {selectedFriend.vehicles.length > 2 && (
+                      <Text style={styles.popupMoreVehicles}>
+                        +{selectedFriend.vehicles.length - 2} araç daha
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Aksiyon Butonları */}
@@ -989,7 +1238,7 @@ export default function ChatScreen({ navigation }) {
                     navigation.navigate('PrivateChat', { friend: selectedFriend });
                   }}
                 >
-                  <Ionicons name="chatbubble" size={getResponsiveIconSize(20)} color={colors.text.light} />
+                  <Ionicons name="chatbubble-ellipses" size={getResponsiveIconSize(22)} color={colors.text.light} />
                   <Text style={styles.popupButtonText}>Mesaj Gönder</Text>
                 </TouchableOpacity>
               </View>
@@ -1137,6 +1386,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: spacing.md,
   },
+  chatAvatarImage: {
+    width: getResponsiveIconSize(40),
+    height: getResponsiveIconSize(40),
+    borderRadius: getResponsiveIconSize(20),
+    backgroundColor: colors.surface,
+  },
   chatAvatarText: {
     fontSize: getResponsiveIconSize(32),
   },
@@ -1207,6 +1462,12 @@ const styles = StyleSheet.create({
   friendAvatar: {
     position: 'relative',
     marginRight: spacing.md,
+  },
+  friendAvatarImage: {
+    width: getResponsiveIconSize(40),
+    height: getResponsiveIconSize(40),
+    borderRadius: getResponsiveIconSize(20),
+    backgroundColor: colors.surface,
   },
   friendAvatarText: {
     fontSize: getResponsiveIconSize(32),
@@ -1391,6 +1652,12 @@ const styles = StyleSheet.create({
   },
   searchResultAvatar: {
     marginRight: spacing.md,
+  },
+  searchResultAvatarImage: {
+    width: getResponsiveIconSize(40),
+    height: getResponsiveIconSize(40),
+    borderRadius: getResponsiveIconSize(20),
+    backgroundColor: colors.surface,
   },
   searchResultAvatarText: {
     fontSize: getResponsiveIconSize(32),
@@ -1642,121 +1909,153 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: colors.overlay,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
   profilePopup: {
-    width: getResponsiveWidth(90),
-    maxWidth: isTablet ? getResponsiveWidth(60) : getResponsiveWidth(90),
+    width: getResponsiveWidth(92),
+    maxWidth: isTablet ? getResponsiveWidth(65) : getResponsiveWidth(92),
     backgroundColor: colors.surface,
-    borderRadius: getResponsiveBorderRadius(25),
+    borderRadius: getResponsiveBorderRadius(30),
     overflow: 'hidden',
-    ...getPlatformShadow(8),
+    ...getPlatformShadow(15),
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.border.light + '40',
   },
-  popupHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: getContainerPadding(),
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-    backgroundColor: colors.darkGray,
-  },
-  popupTitle: {
-    fontSize: fontSizes.xxl,
-    fontWeight: 'bold',
-    color: colors.text.primary,
-    letterSpacing: 0.5,
+  popupGradientHeader: {
+    height: getResponsiveHeight(8),
+    backgroundColor: colors.primary,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderTopLeftRadius: getResponsiveBorderRadius(30),
+    borderTopRightRadius: getResponsiveBorderRadius(30),
   },
   popupCloseButton: {
     padding: spacing.sm,
-    borderRadius: getResponsiveBorderRadius(20),
-    backgroundColor: colors.primaryAlpha,
+    borderRadius: getResponsiveBorderRadius(25),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     minWidth: getMinTouchTarget(),
     minHeight: getMinTouchTarget(),
     justifyContent: 'center',
     alignItems: 'center',
+    backdropFilter: 'blur(10px)',
   },
   popupContent: {
-    padding: getContainerPadding(),
+    padding: spacing.xl,
+    paddingTop: spacing.lg,
   },
   popupImageContainer: {
     alignItems: 'center',
-    marginBottom: getContainerPadding(),
+    marginBottom: spacing.xl,
+    marginTop: -spacing.xl, // Gradient header ile overlap
+  },
+  popupImageWrapper: {
+    position: 'relative',
   },
   popupProfileImage: {
-    width: getAvatarSize('xlarge'),
-    height: getAvatarSize('xlarge'),
-    borderRadius: getAvatarSize('xlarge') / 2,
-    borderWidth: 4,
-    borderColor: colors.primary,
-    ...getPlatformShadow(4),
+    width: scale(120),
+    height: scale(120),
+    borderRadius: scale(60),
+    borderWidth: 5,
+    borderColor: colors.surface,
+    ...getPlatformShadow(8),
   },
   popupDefaultImage: {
-    width: getAvatarSize('xlarge'),
-    height: getAvatarSize('xlarge'),
-    borderRadius: getAvatarSize('xlarge') / 2,
-    backgroundColor: colors.darkGray,
+    width: scale(120),
+    height: scale(120),
+    borderRadius: scale(60),
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: colors.primary,
-    ...getPlatformShadow(4),
+    borderWidth: 5,
+    borderColor: colors.surface,
+    ...getPlatformShadow(8),
+  },
+  popupStatusBadge: {
+    position: 'absolute',
+    bottom: scale(8),
+    right: scale(8),
+    width: scale(24),
+    height: scale(24),
+    borderRadius: scale(12),
+    borderWidth: 3,
+    borderColor: colors.surface,
+    ...getPlatformShadow(3),
   },
   popupInfo: {
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
   popupName: {
-    fontSize: fontSizes.title,
-    fontWeight: 'bold',
+    fontSize: fontSizes.xxl,
+    fontWeight: '800',
     color: colors.text.primary,
     marginBottom: spacing.lg,
     textAlign: 'center',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
-  popupAgeContainer: {
+  popupInfoCards: {
+    width: '100%',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  popupInfoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.darkGray,
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderRadius: getResponsiveBorderRadius(20),
-    gap: spacing.sm,
-  },
-  popupAgeText: {
-    fontSize: fontSizes.lg,
-    color: colors.text.secondary,
-    fontWeight: '600',
-  },
-  popupStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.darkGray,
-    borderRadius: getResponsiveBorderRadius(20),
-    gap: spacing.sm,
-  },
-  popupStatusIndicator: {
-    width: scale(14),
-    height: scale(14),
-    borderRadius: scale(7),
+    borderWidth: 1,
+    borderColor: colors.border.light + '30',
     ...getPlatformShadow(2),
   },
-  popupStatusText: {
-    fontSize: fontSizes.md,
+  popupInfoIconContainer: {
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  popupInfoTextContainer: {
+    flex: 1,
+  },
+  popupInfoLabel: {
+    fontSize: fontSizes.sm,
+    color: colors.text.tertiary,
+    fontWeight: '500',
+    marginBottom: scale(2),
+  },
+  popupInfoValue: {
+    fontSize: fontSizes.lg,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  popupMutualFriends: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.secondary,
+    borderRadius: getResponsiveBorderRadius(15),
+    borderWidth: 1,
+    borderColor: colors.border.light + '20',
+    gap: spacing.xs,
+  },
+  popupMutualText: {
+    fontSize: fontSizes.sm,
     color: colors.text.secondary,
     fontWeight: '600',
   },
   popupActions: {
-    flexDirection: 'row',
-    gap: 0,
+    width: '100%',
   },
   popupMessageButton: {
     width: '100%',
@@ -1764,18 +2063,95 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    borderRadius: getResponsiveBorderRadius(30),
+    paddingVertical: spacing.lg,
+    borderRadius: getResponsiveBorderRadius(25),
     gap: spacing.sm,
     minHeight: getResponsiveButtonHeight(),
-    ...getPlatformShadow(4),
+    ...getPlatformShadow(6),
     borderWidth: 1,
     borderColor: colors.primary,
   },
   popupButtonText: {
     color: colors.text.light,
-    fontSize: fontSizes.xl,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Araç Bilgileri Stilleri
+  popupVehiclesSection: {
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  popupVehiclesTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  popupVehicleCard: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: getResponsiveBorderRadius(15),
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border.light + '20',
+    ...getPlatformShadow(2),
+  },
+  popupVehicleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  popupVehicleIconContainer: {
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(16),
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  popupVehicleInfo: {
+    flex: 1,
+  },
+  popupVehicleBrandModel: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: scale(2),
+  },
+  popupVehiclePlate: {
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+  popupPrimaryBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: getResponsiveBorderRadius(10),
+  },
+  popupPrimaryText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    color: colors.text.light,
+  },
+  popupVehicleDetails: {
+    marginTop: spacing.xs,
+    paddingLeft: scale(44), // Icon + margin ile hizalama
+  },
+  popupVehicleDetail: {
+    fontSize: fontSizes.sm,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  popupMoreVehicles: {
+    fontSize: fontSizes.sm,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
   },
 });

@@ -68,6 +68,97 @@ export default function PhotoScreen() {
     };
   }, []);
 
+  // API entegrasyonu - Fotoğrafları yükle
+  const loadPhotos = async () => {
+    try {
+      setLoading(true);
+      console.log('API ile fotoğraflar yükleniyor...');
+      
+      const response = await apiService.getPhotos(20, 0);
+      
+      if (response.success && response.data.photos) {
+        console.log('Fotoğraflar API ile yüklendi:', response.data.photos.length);
+        setPhotos(response.data.photos);
+      } else {
+        console.error('Fotoğraf yükleme hatası:', response.message);
+        // Fallback olarak mock data kullan
+        setPhotos(getMockPhotos());
+      }
+    } catch (error) {
+      console.error('API fotoğraf yükleme hatası:', error);
+      // Fallback olarak mock data kullan
+      setPhotos(getMockPhotos());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // API entegrasyonu - Fotoğraf yükle
+  const uploadPhotoToAPI = async (imageUri, caption = '') => {
+    try {
+      console.log('API ile fotoğraf yükleniyor:', imageUri);
+      
+      const formData = new FormData();
+      formData.append('photo', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'photo.jpg',
+      });
+      formData.append('caption', caption);
+      
+      const response = await apiService.uploadPhoto(formData);
+      
+      if (response.success) {
+        console.log('Fotoğraf API ile başarıyla yüklendi:', response.data);
+        
+        // Socket ile diğer kullanıcılara bildir
+        if (socketService.isSocketConnected()) {
+          socketService.emitToSocket('photo_shared', {
+            photoId: response.data.photo.id,
+            userId: currentUserId
+          });
+        }
+        
+        return response.data.photo;
+      } else {
+        console.error('Fotoğraf yükleme hatası:', response.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('API fotoğraf yükleme hatası:', error);
+      return null;
+    }
+  };
+
+  // API entegrasyonu - Fotoğraf beğen
+  const likePhotoAPI = async (photoId) => {
+    try {
+      console.log('API ile fotoğraf beğeniliyor:', photoId);
+      
+      const response = await apiService.likePhoto(photoId);
+      
+      if (response.success) {
+        console.log('Fotoğraf beğenisi API ile güncellendi:', response);
+        
+        // Socket ile diğer kullanıcılara bildir
+        if (socketService.isSocketConnected()) {
+          socketService.emitToSocket('photo_liked', {
+            photoId: photoId,
+            liked: response.liked
+          });
+        }
+        
+        return response.liked;
+      } else {
+        console.error('Fotoğraf beğeni hatası:', response.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('API fotoğraf beğeni hatası:', error);
+      return false;
+    }
+  };
+
   // Tab değiştiğinde fotoğrafları yeniden yükle - artık sadece feed var
   useEffect(() => {
     loadPhotos();
@@ -98,35 +189,6 @@ export default function PhotoScreen() {
     );
   };
 
-  // Fotoğrafları yükle
-  const loadPhotos = async () => {
-    try {
-      // Token'ı kontrol et
-      const token = await apiService.getStoredToken();
-      if (!token) {
-        console.log('Token bulunamadı, fotoğraflar yüklenemiyor');
-        return;
-      }
-      
-      // Token'ı API servisine set et
-      apiService.setToken(token);
-      
-      setLoading(true);
-      const endpoint = '/photos/feed';
-      const response = await apiService.get(endpoint);
-      
-      if (response.success) {
-        setPhotos(response.data.photos || []);
-      } else {
-        Alert.alert('Hata', 'Fotoğraflar yüklenirken bir hata oluştu');
-      }
-    } catch (error) {
-      console.error('Load photos error:', error);
-      Alert.alert('Hata', 'Fotoğraflar yüklenirken bir hata oluştu');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Pull to refresh
   const onRefresh = async () => {

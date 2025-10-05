@@ -7,7 +7,10 @@ const {
   markAllAsRead,
   deleteNotification,
   deleteReadNotifications,
-  getNotificationStats
+  getNotificationStats,
+  registerPushToken,
+  sendPushNotification,
+  sendBulkPushNotification
 } = require('../controllers/notificationController');
 
 // Tüm route'lar authentication gerektirir
@@ -30,5 +33,14 @@ router.delete('/:notificationId', deleteNotification);
 
 // Okunmuş bildirimleri sil
 router.delete('/cleanup/read', deleteReadNotifications);
+
+// Push token kaydet
+router.post('/register-token', registerPushToken);
+
+// Push notification gönder (tek kullanıcı)
+router.post('/send-push', sendPushNotification);
+
+// Toplu push notification gönder
+router.post('/send-bulk-push', sendBulkPushNotification);
 
 module.exports = router;

@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: './config.env' });
 
 // Import database connection
-const { testConnection } = require('./config/database');
+const { testConnection, pool } = require('./config/database');
 
 // Import email service
 const emailService = require('./services/emailService');
@@ -25,6 +25,7 @@ const friendshipRoutes = require('./routes/friendships');
 const notificationRoutes = require('./routes/notifications');
 const socialRoutes = require('./routes/social');
 const chatRoutes = require('./routes/chat');
+const vehicleRoutes = require('./routes/vehicles');
 
 // Import models
 const Activity = require('./models/Activity');
@@ -34,9 +35,25 @@ const { createNotification, sendNotification } = require('./controllers/notifica
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: [
+// Production ve Development için CORS ayarları
+const getCorsOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return [
+      process.env.FRONTEND_URL,
+      process.env.PRODUCTION_FRONTEND_URL,
+      "https://*.exp.direct",
+      "https://*.exp.direct:443",
+      "https://*.exp.direct:80",
+      "https://*.exp.direct:19000",
+      "https://*.exp.direct:19006",
+      "exp://*.exp.direct",
+      "exp://*.exp.direct:443",
+      "exp://*.exp.direct:80",
+      "exp://*.exp.direct:19000",
+      "exp://*.exp.direct:19006"
+    ].filter(Boolean);
+  } else {
+    return [
       "http://localhost:19006", 
       "http://localhost:19000",
       "http://127.0.0.1:19006",
@@ -56,11 +73,26 @@ const io = new Server(server, {
       "exp://*.exp.direct:443",
       "exp://*.exp.direct:80",
       "exp://*.exp.direct:19000",
-      "exp://*.exp.direct:19006"
-    ],
+      "exp://*.exp.direct:19006",
+      // Ngrok tunnel URL'leri için
+      "https://*.ngrok.io",
+      "https://*.ngrok-free.app"
+    ];
+  }
+};
+
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Geçici olarak tüm origin'lere izin ver
     methods: ['GET', 'POST'],
     credentials: true
-  }
+  },
+  // Production optimizasyonları
+  pingTimeout: process.env.NODE_ENV === 'production' ? 60000 : 30000,
+  pingInterval: process.env.NODE_ENV === 'production' ? 25000 : 15000,
+  maxHttpBufferSize: process.env.NODE_ENV === 'production' ? 1e6 : 1e5, // 1MB production, 100KB development
+  transports: ['websocket', 'polling'], // Her zaman her iki transport'u da kullan
+  allowEIO3: true // Eski client'lar için uyumluluk
 });
 
 const PORT = process.env.PORT || 3000;
@@ -69,28 +101,7 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 app.use(morgan('combined'));
 app.use(cors({
-  origin: [
-    "http://localhost:19006", 
-    "http://localhost:19000",
-    "http://127.0.0.1:19006",
-    "http://127.0.0.1:19000",
-    "http://192.168.1.2:19006", 
-    "http://192.168.1.2:19000",
-    "http://192.168.1.9:19006",
-    "http://192.168.1.9:19000",
-    "exp://192.168.1.2:19000",
-    "exp://192.168.1.9:19000",
-    "https://*.exp.direct",
-    "https://*.exp.direct:443",
-    "https://*.exp.direct:80",
-    "https://*.exp.direct:19000",
-    "https://*.exp.direct:19006",
-    "exp://*.exp.direct",
-    "exp://*.exp.direct:443",
-    "exp://*.exp.direct:80",
-    "exp://*.exp.direct:19000",
-    "exp://*.exp.direct:19006"
-  ],
+  origin: getCorsOrigins(),
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -132,7 +143,10 @@ io.use(async (socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.userId;
     socket.userEmail = decoded.email;
-    console.log('✅ Token verified for user:', decoded.email);
+    socket.userFirstName = decoded.firstName || '';
+    socket.userLastName = decoded.lastName || '';
+    socket.userName = `${decoded.firstName || ''} ${decoded.lastName || ''}`.trim() || decoded.email;
+    console.log('✅ Token verified for user:', decoded.email, 'Name:', socket.userName);
     next();
   } catch (err) {
     console.log('❌ Token verification failed:', err.message);
@@ -148,7 +162,10 @@ io.use(async (socket, next) => {
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log(`🔌 User connected: ${socket.userEmail} (${socket.id})`);
+  console.log(`🔌🔌🔌 User connected: ${socket.userEmail} (${socket.id})`);
+  console.log(`🔌 Socket transport: ${socket.conn.transport.name}`);
+  console.log(`🔌 Socket handshake:`, socket.handshake);
+  console.log(`🔌 Total connected users: ${io.engine.clientsCount}`);
 
   // Kullanıcıyı genel odaya ekle
   socket.join('general');
@@ -202,23 +219,36 @@ io.on('connection', (socket) => {
 
   // Mesaj gönderme
   socket.on('send_message', (data) => {
-    console.log(`💬 Message received from ${socket.userEmail}: ${data.message}`);
+    console.log(`💬💬💬 Message received from ${socket.userEmail}: ${data.message}`);
+    console.log(`💬 Socket ID: ${socket.id}`);
+    console.log(`💬 User ID: ${socket.userId}`);
+    console.log(`💬 Room: ${data.room || 'general'}`);
+    console.log(`💬 Data:`, JSON.stringify(data, null, 2));
+    
     const messageData = {
       message: data.message,
       senderId: socket.userId,
       senderEmail: socket.userEmail,
+      senderName: socket.userName,
+      senderFirstName: socket.userFirstName,
+      senderLastName: socket.userLastName,
       timestamp: new Date().toISOString(),
       room: data.room || 'general'
     };
 
+    console.log(`💬 Message data prepared:`, JSON.stringify(messageData, null, 2));
+
     // Mesajı tüm kullanıcılara gönder (genel sohbet için)
     if (data.room === 'general' || !data.room) {
-      io.emit('message_received', messageData);
-      console.log(`📤 Message broadcasted to all users in general chat`);
+      // Kendi mesajını kendisine gönderme - sadece diğer kullanıcılara gönder
+      console.log(`📤 Broadcasting to all other users in general chat...`);
+      socket.broadcast.emit('message_received', messageData);
+      console.log(`📤 Message broadcasted to all other users in general chat (excluding sender)`);
     } else {
-      // Özel odalar için sadece o odaya gönder
-      io.to(data.room).emit('message_received', messageData);
-      console.log(`📤 Message broadcasted to room ${data.room}`);
+      // Özel odalar için sadece o odaya gönder (gönderen hariç)
+      console.log(`📤 Broadcasting to room ${data.room}...`);
+      socket.to(data.room).emit('message_received', messageData);
+      console.log(`📤 Message broadcasted to room ${data.room} (excluding sender)`);
     }
   });
 
@@ -640,6 +670,7 @@ app.use('/api/friendships', friendshipRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/vehicles', vehicleRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -652,14 +683,93 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(404).json({ message: 'Route not found'   });
 });
+
+// user_vehicles tablosunu oluştur (yoksa)
+const createVehicleTableIfNotExists = async () => {
+  try {
+    console.log('🚗 Araç bilgileri tablosu kontrol ediliyor...');
+
+    // Tablo var mı kontrol et
+    const tableCheckResult = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'user_vehicles'
+      );
+    `);
+
+    const tableExists = tableCheckResult.rows[0].exists;
+    console.log('user_vehicles table exists:', tableExists);
+
+    if (!tableExists) {
+      console.log('🚗 Araç bilgileri tablosu oluşturuluyor...');
+
+      // Araç bilgileri tablosu
+      const createVehicleTableQuery = `
+        CREATE TABLE user_vehicles (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          plate_number VARCHAR(20) NOT NULL,
+          brand VARCHAR(100) NOT NULL,
+          model VARCHAR(100) NOT NULL,
+          year INTEGER,
+          color VARCHAR(50),
+          fuel_type VARCHAR(20) CHECK (fuel_type IN ('benzin', 'dizel', 'hibrit', 'elektrik', 'lpg', 'diğer')),
+          engine_volume VARCHAR(20),
+          additional_info TEXT,
+          photo_url VARCHAR(500),
+          is_primary BOOLEAN DEFAULT false,
+          is_verified BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, plate_number)
+        );
+      `;
+
+      await pool.query(createVehicleTableQuery);
+      console.log('✅ Araç bilgileri tablosu oluşturuldu');
+
+      // Indexler
+      const createIndexesQuery = `
+        CREATE INDEX idx_user_vehicles_user_id ON user_vehicles(user_id);
+        CREATE INDEX idx_user_vehicles_plate ON user_vehicles(plate_number);
+        CREATE INDEX idx_user_vehicles_primary ON user_vehicles(user_id, is_primary);
+        CREATE INDEX idx_user_vehicles_created_at ON user_vehicles(created_at);
+        CREATE INDEX idx_user_vehicles_photo ON user_vehicles(photo_url) WHERE photo_url IS NOT NULL;
+      `;
+
+      await pool.query(createIndexesQuery);
+      console.log('✅ Araç bilgileri indexleri oluşturuldu');
+
+      // Trigger fonksiyonu
+      const createTriggerQuery = `
+        CREATE TRIGGER update_user_vehicles_updated_at BEFORE UPDATE ON user_vehicles
+          FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      `;
+
+      await pool.query(createTriggerQuery);
+      console.log('✅ Araç bilgileri trigger\'ı oluşturuldu');
+
+      console.log('🎉 Araç bilgileri tablosu başarıyla oluşturuldu!');
+    } else {
+      console.log('✅ Araç bilgileri tablosu zaten mevcut');
+    }
+  } catch (error) {
+    console.error('❌ Araç bilgileri tablosu oluşturulurken hata:', error);
+    throw error;
+  }
+};
 
 // Veritabanı bağlantısını test et ve sunucuyu başlat
 const startServer = async () => {
   try {
     // Veritabanı bağlantısını test et
     await testConnection();
+    
+    // user_vehicles tablosunu oluştur (yoksa)
+    await createVehicleTableIfNotExists();
     
     // Email servisini yapılandır (opsiyonel)
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {

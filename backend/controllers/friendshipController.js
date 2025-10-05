@@ -174,6 +174,8 @@ const addFriend = async (req, res) => {
     const userId = req.user.id;
     const { friendId } = req.body;
     
+    console.log('🔍 FriendshipController - addFriend çağrıldı:', { userId, friendId });
+    
     if (!friendId) {
       return res.status(400).json({
         success: false,
@@ -577,6 +579,66 @@ const getFriendsStats = async (req, res) => {
   }
 };
 
+// Arkadaşın araç bilgilerini getir
+const getFriendVehicles = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const friendId = req.params.friendId;
+    
+    // Önce arkadaşlık durumunu kontrol et
+    const friendshipQuery = `
+      SELECT status FROM friendships 
+      WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))
+      AND status = 'accepted'
+    `;
+    
+    const friendshipResult = await pool.query(friendshipQuery, [userId, friendId]);
+    
+    if (friendshipResult.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bu kullanıcı ile arkadaş değilsiniz'
+      });
+    }
+    
+    // Arkadaşın araç bilgilerini getir
+    const vehiclesQuery = `
+      SELECT 
+        id,
+        plate_number,
+        brand,
+        model,
+        year,
+        color,
+        fuel_type,
+        engine_volume,
+        additional_info,
+        photo_url,
+        is_primary,
+        created_at
+      FROM user_vehicles 
+      WHERE user_id = $1 
+      ORDER BY is_primary DESC, created_at DESC
+    `;
+    
+    const vehiclesResult = await pool.query(vehiclesQuery, [friendId]);
+    
+    res.json({
+      success: true,
+      data: {
+        vehicles: vehiclesResult.rows
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get friend vehicles error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Arkadaş araç bilgileri alınırken hata oluştu'
+    });
+  }
+};
+
 module.exports = {
   getFriends,
   getFriendRequests,
@@ -586,5 +648,6 @@ module.exports = {
   removeFriend,
   blockUser,
   unblockUser,
-  getFriendsStats
+  getFriendsStats,
+  getFriendVehicles
 };

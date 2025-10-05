@@ -15,17 +15,22 @@ class SocketService {
   // Socket bağlantısını başlat
   async connect() {
     try {
-      console.log('SocketService: Bağlantı başlatılıyor...');
+      console.log('🔌🔌🔌 SocketService: Bağlantı başlatılıyor...');
       let token = await apiService.getStoredToken();
       
       // Eğer token yoksa, API servisinden al
       if (!token) {
-        console.log('SocketService: Stored token bulunamadı, API servisinden alınıyor...');
+        console.log('🔌 SocketService: Stored token bulunamadı, API servisinden alınıyor...');
         token = apiService.token;
       }
       
       if (!token) {
-        console.log('SocketService: Token bulunamadı, socket bağlantısı atlanıyor');
+        console.log('🔌 SocketService: Token bulunamadı, socket bağlantısı atlanıyor');
+        // Token yoksa 1 saniye sonra tekrar dene
+        setTimeout(() => {
+          console.log('🔌 SocketService: Token bulunamadı, tekrar deneniyor...');
+          this.connect();
+        }, 1000);
         return;
       }
       
@@ -45,6 +50,10 @@ class SocketService {
       const socketURL = baseURL.replace('/api', '');
       console.log('SocketService: Socket URL:', socketURL);
       
+      // Production için WebSocket URL'ini ayarla
+      const finalSocketURL = __DEV__ ? socketURL : socketURL.replace('http://', 'wss://').replace('https://', 'wss://');
+      console.log('SocketService: Final Socket URL:', finalSocketURL);
+      
       // Tunnel URL kontrolü
       if (socketURL.includes('ngrok.io') || socketURL.includes('exp.direct')) {
         console.log('SocketService: Using tunnel connection');
@@ -52,18 +61,21 @@ class SocketService {
         console.log('SocketService: Using local connection');
       }
 
-      this.socket = io(socketURL, {
+      this.socket = io(finalSocketURL, {
         auth: {
           token: token
         },
-        transports: ['websocket', 'polling'],
-        timeout: 30000, // 30 saniye timeout
+        transports: ['websocket', 'polling'], // Her zaman her iki transport'u da dene
+        timeout: 5000, // Çok kısa timeout
         forceNew: true,
         autoConnect: true,
         reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5,
-        maxReconnectionAttempts: 5
+        reconnectionDelay: 500, // Çok hızlı yeniden bağlanma
+        reconnectionAttempts: 50, // Çok fazla deneme
+        maxReconnectionAttempts: 50,
+        upgrade: true, // Transport upgrade'i etkinleştir
+        rememberUpgrade: true, // Upgrade'i hatırla
+        randomizationFactor: 0.1 // Daha az rastgelelik
       });
 
       console.log('SocketService: Socket instance oluşturuldu');
@@ -81,7 +93,9 @@ class SocketService {
 
     // Bağlantı başarılı
     this.socket.on('connect', () => {
-      console.log('SocketService: Socket bağlandı, ID:', this.socket.id);
+      console.log('🔌🔌🔌 SocketService: Socket bağlandı, ID:', this.socket.id);
+      console.log('🔌 SocketService: Socket URL:', this.socket.io.uri);
+      console.log('🔌 SocketService: Socket transport:', this.socket.io.engine.transport.name);
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this.emitLocal('connection_status', { connected: true });
@@ -279,21 +293,28 @@ class SocketService {
 
   // Mesaj gönder
   sendMessage(message, room = 'general') {
+    console.log('📤📤📤 SocketService: sendMessage çağrıldı');
+    console.log('📤 SocketService: Socket exists:', !!this.socket);
+    console.log('📤 SocketService: Is connected:', this.isConnected);
+    console.log('📤 SocketService: Message:', message);
+    console.log('📤 SocketService: Room:', room);
+    
     if (!this.socket || !this.isConnected) {
-      console.log('Socket not connected, message not sent');
+      console.log('❌ SocketService: Socket not connected, message not sent');
       return false;
     }
 
     try {
+      console.log('📤 SocketService: Mesaj socket\'e gönderiliyor...');
       this.emitToSocket('send_message', {
         message: message,
         room: room,
         timestamp: new Date().toISOString()
       });
-      console.log('Message sent:', message);
+      console.log('✅ SocketService: Message sent successfully:', message);
       return true;
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ SocketService: Error sending message:', error);
       return false;
     }
   }
@@ -495,11 +516,18 @@ class SocketService {
 
   // Event emit et (socket'e gönder)
   emitToSocket(event, data) {
+    console.log('📡📡📡 SocketService: emitToSocket çağrıldı');
+    console.log('📡 SocketService: Event:', event);
+    console.log('📡 SocketService: Data:', JSON.stringify(data, null, 2));
+    console.log('📡 SocketService: Socket exists:', !!this.socket);
+    console.log('📡 SocketService: Socket connected:', this.isConnected);
+    
     if (this.socket) {
-      console.log('SocketService: Socket\'e emit ediliyor:', event, data);
+      console.log('📡 SocketService: Socket\'e emit ediliyor:', event, data);
       this.socket.emit(event, data);
+      console.log('✅ SocketService: Emit başarılı');
     } else {
-      console.log('SocketService: Socket yok, emit edilemedi:', event);
+      console.log('❌ SocketService: Socket yok, emit edilemedi:', event);
     }
   }
 

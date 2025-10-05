@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Image,
+  Modal,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,8 +38,20 @@ export default function PrivateChatScreen({ navigation, route }) {
   console.log('🚀 PrivateChatScreen: Component başlatıldı');
   console.log('🚀 PrivateChatScreen: Route params:', route.params);
   
-  const { friend } = route.params;
-  console.log('🚀 PrivateChatScreen: Friend data:', friend);
+  const { friend: originalFriend } = route.params;
+  console.log('🚀 PrivateChatScreen: Friend data:', originalFriend);
+  
+  // Profil fotoğrafı URL'sini tam URL'ye çevir (useMemo ile optimize et)
+  const friend = useMemo(() => {
+    if (!originalFriend) return null;
+    
+    return {
+      ...originalFriend,
+      profilePicture: originalFriend.profilePicture && originalFriend.profilePicture.startsWith('/uploads/') 
+        ? `${apiService.baseURL.replace('/api', '')}${originalFriend.profilePicture}` 
+        : originalFriend.profilePicture
+    };
+  }, [originalFriend]);
   
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -44,6 +59,9 @@ export default function PrivateChatScreen({ navigation, route }) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [friendProfile, setFriendProfile] = useState(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const flatListRef = useRef(null);
 
   // messages state değişimini takip et
@@ -143,7 +161,45 @@ export default function PrivateChatScreen({ navigation, route }) {
       setIsLoading(false);
       console.log('📥 PrivateChatScreen: loadPrivateMessageHistory tamamlandı');
     }
-  }, [currentUser, friend.id]);
+  }, [currentUser, friend?.id]);
+
+  // Kullanıcı profil bilgilerini yükle
+  const loadFriendProfile = async () => {
+    try {
+      setIsLoadingProfile(true);
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        console.log('Token bulunamadı, profil bilgileri yüklenemiyor');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      // API'den kullanıcı profil bilgilerini çek
+      const response = await apiService.getUserProfile(friend.id);
+      
+      if (response.success) {
+        console.log('Kullanıcı profil bilgileri yüklendi:', response.data);
+        
+        // Profil fotoğrafı URL'sini tam URL'ye çevir
+        const profileData = response.data;
+        if (profileData.profile_picture && profileData.profile_picture.startsWith('/uploads/')) {
+          const apiBaseUrl = apiService.baseURL.replace('/api', '');
+          profileData.profile_picture = `${apiBaseUrl}${profileData.profile_picture}`;
+        }
+        
+        setFriendProfile(profileData);
+        setShowProfileModal(true);
+      } else {
+        Alert.alert('Hata', 'Profil bilgileri yüklenemedi');
+      }
+    } catch (error) {
+      console.error('Profil bilgileri yüklenirken hata:', error);
+      Alert.alert('Hata', 'Profil bilgileri yüklenirken bir hata oluştu');
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
 
   // Sohbeti sil (tüm mesajları temizle)
   const clearChat = () => {
@@ -326,8 +382,10 @@ export default function PrivateChatScreen({ navigation, route }) {
   useEffect(() => {
     console.log('🔌 PrivateChatScreen: Socket bağlantısı başlatılıyor...');
     
-    // Socket bağlantısını başlat
-    socketService.connect();
+    // Socket bağlantısını başlat (sadece bir kez)
+    if (!socketService.isSocketConnected()) {
+      socketService.connect();
+    }
 
     // Socket bağlantısını kontrol et
     const checkConnection = () => {
@@ -336,14 +394,15 @@ export default function PrivateChatScreen({ navigation, route }) {
         console.log('🔌 PrivateChatScreen: Socket bağlantısı kuruldu');
         setIsSocketConnected(true);
         // Özel odaya katıl
-        const roomName = `private_${Math.min(currentUser?.id || 0, friend.id)}_${Math.max(currentUser?.id || 0, friend.id)}`;
-        console.log('🔌 PrivateChatScreen: Özel odaya katılmaya çalışılıyor:', roomName);
-        const joinResult = socketService.joinRoom(roomName);
-        console.log('🔌 PrivateChatScreen: Özel odaya katılma sonucu:', joinResult);
+        if (currentUser && friend?.id) {
+          const roomName = `private_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
+          console.log('🔌 PrivateChatScreen: Özel odaya katılmaya çalışılıyor:', roomName);
+          const joinResult = socketService.joinRoom(roomName);
+          console.log('🔌 PrivateChatScreen: Özel odaya katılma sonucu:', joinResult);
+        }
       } else {
-        console.log('🔌 PrivateChatScreen: Socket bağlantısı yok, tekrar denenecek...');
+        console.log('🔌 PrivateChatScreen: Socket bağlantısı yok');
         setIsSocketConnected(false);
-        setTimeout(checkConnection, 1000);
       }
     };
 
@@ -366,7 +425,7 @@ export default function PrivateChatScreen({ navigation, route }) {
       socketService.off('connection_error', handleConnectionError);
       socketService.off('connection_status', handleConnectionStatus);
     };
-  }, [currentUser, friend]);
+  }, [currentUser, friend?.id, handlePrivateMessageReceived, handleConnectionError, handleConnectionStatus]);
 
   // currentUser yüklendikten sonra mesaj geçmişini yükle
   useEffect(() => {
@@ -508,9 +567,16 @@ export default function PrivateChatScreen({ navigation, route }) {
             <View style={styles.avatarContainer}>
               {friend.profilePicture ? (
                 <Image
-                  source={{ uri: `http://192.168.1.2:3000${friend.profilePicture}` }}
+                  source={{ uri: friend.profilePicture }}
                   style={styles.avatarImage}
                   resizeMode="cover"
+                  onError={(error) => {
+                    console.log('💬 PrivateChatScreen: Image load error:', error.nativeEvent.error);
+                    console.log('💬 PrivateChatScreen: Failed URL:', friend.profilePicture);
+                  }}
+                  onLoad={() => {
+                    console.log('💬 PrivateChatScreen: Image loaded successfully:', friend.profilePicture);
+                  }}
                 />
               ) : (
                 <Text style={styles.avatar}>{item.avatar}</Text>
@@ -582,12 +648,23 @@ export default function PrivateChatScreen({ navigation, route }) {
               <Ionicons name="arrow-back" size={24} color={colors.text.light} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <View style={styles.headerUserInfo}>
+              <TouchableOpacity 
+                style={styles.headerUserInfo}
+                onPress={loadFriendProfile}
+                disabled={isLoadingProfile}
+              >
                 {friend.profilePicture ? (
                   <Image
-                    source={{ uri: `http://192.168.1.2:3000${friend.profilePicture}` }}
+                    source={{ uri: friend.profilePicture }}
                     style={styles.headerAvatar}
                     resizeMode="cover"
+                    onError={(error) => {
+                      console.log('💬 PrivateChatScreen Header: Image load error:', error.nativeEvent.error);
+                      console.log('💬 PrivateChatScreen Header: Failed URL:', friend.profilePicture);
+                    }}
+                    onLoad={() => {
+                      console.log('💬 PrivateChatScreen Header: Image loaded successfully:', friend.profilePicture);
+                    }}
                   />
                 ) : (
                   <View style={styles.headerDefaultAvatar}>
@@ -596,8 +673,11 @@ export default function PrivateChatScreen({ navigation, route }) {
                 )}
                 <View style={styles.headerTextContainer}>
                   <Text style={styles.headerTitle}>{friend.name}</Text>
+                  <Text style={styles.headerStatus}>
+                    {isLoadingProfile ? 'Yükleniyor...' : (isSocketConnected ? 'Çevrimiçi' : 'Çevrimdışı')}
+                  </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             </View>
             <View style={styles.headerSpacer} />
           </View>
@@ -725,6 +805,98 @@ export default function PrivateChatScreen({ navigation, route }) {
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Profil Modal */}
+      <Modal
+        visible={showProfileModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Profil Bilgileri</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowProfileModal(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Content */}
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {friendProfile ? (
+                <>
+                  {/* Profil Fotoğrafı */}
+                  <View style={styles.modalImageContainer}>
+                    {friendProfile.profile_picture ? (
+                      <Image
+                        source={{ uri: friendProfile.profile_picture }}
+                        style={styles.modalProfileImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.modalDefaultImage}>
+                        <Ionicons name="person" size={60} color={colors.text.secondary} />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Kullanıcı Bilgileri */}
+                  <View style={styles.modalUserInfo}>
+                    <Text style={styles.modalUserName}>
+                      {friendProfile.first_name} {friendProfile.last_name}
+                    </Text>
+                    <Text style={styles.modalUserEmail}>{friendProfile.email}</Text>
+                    
+                    {friendProfile.birth_date && (
+                      <Text style={styles.modalUserAge}>
+                        {new Date().getFullYear() - new Date(friendProfile.birth_date).getFullYear()} yaşında
+                      </Text>
+                    )}
+                    
+                    {friendProfile.gender && (
+                      <Text style={styles.modalUserGender}>
+                        {friendProfile.gender === 'male' ? 'Erkek' : friendProfile.gender === 'female' ? 'Kadın' : friendProfile.gender}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Ek Bilgiler */}
+                  <View style={styles.modalAdditionalInfo}>
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="mail" size={20} color={colors.primary} />
+                      <Text style={styles.modalInfoText}>Email: {friendProfile.email}</Text>
+                    </View>
+                    
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                      <Text style={styles.modalInfoText}>
+                        Email Doğrulandı: {friendProfile.email_verified ? 'Evet' : 'Hayır'}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="shield-checkmark" size={20} color={colors.info} />
+                      <Text style={styles.modalInfoText}>
+                        Hesap Durumu: {friendProfile.is_verified ? 'Doğrulandı' : 'Doğrulanmadı'}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.modalLoadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.modalLoadingText}>Profil bilgileri yükleniyor...</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -795,6 +967,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text.light,
     marginBottom: 2,
+  },
+  headerStatus: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
   },
   headerSubtitle: {
     fontSize: 12,
@@ -1064,5 +1241,122 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginLeft: 12,
     fontWeight: '500',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    width: Dimensions.get('window').width * 0.9,
+    maxHeight: Dimensions.get('window').height * 0.8,
+    shadowColor: colors.shadow.dark,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text.primary,
+  },
+  modalCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: colors.lightGray,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalImageContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  modalProfileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: colors.primary,
+  },
+  modalDefaultImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.lightGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: colors.primary,
+  },
+  modalUserInfo: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  modalUserName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  modalUserEmail: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    marginBottom: 4,
+  },
+  modalUserAge: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    marginBottom: 4,
+  },
+  modalUserGender: {
+    fontSize: 16,
+    color: colors.text.secondary,
+  },
+  modalAdditionalInfo: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  modalInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.lightGray,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalInfoText: {
+    fontSize: 14,
+    color: colors.text.primary,
+    marginLeft: 12,
+    flex: 1,
+  },
+  modalLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  modalLoadingText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    marginTop: 12,
   },
 });

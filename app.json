@@ -45,7 +45,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Bu uygulama yakındaki kullanıcıları göstermek için konum bilginizi kullanır."
+        }
+      ]
     ]
   }
 }

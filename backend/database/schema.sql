@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     location_accuracy DECIMAL(8, 2),
     location_is_sharing BOOLEAN DEFAULT false,
     location_last_updated TIMESTAMP,
+    push_token TEXT, -- Expo push notification token
     privacy JSONB DEFAULT '{"showLocation": false, "profileVisibility": "public", "showOnlineStatus": true, "allowMessages": true}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

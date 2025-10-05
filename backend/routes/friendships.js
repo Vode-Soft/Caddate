@@ -10,7 +10,8 @@ const {
   removeFriend,
   blockUser,
   unblockUser,
-  getFriendsStats
+  getFriendsStats,
+  getFriendVehicles
 } = require('../controllers/friendshipController');
 
 // Tüm route'lar authentication gerektirir
@@ -42,5 +43,8 @@ router.delete('/:friendId', removeFriend);
 
 // Kullanıcının engelini kaldır
 router.delete('/unblock/:friendId', unblockUser);
+
+// Arkadaşın araç bilgilerini getir
+router.get('/:friendId/vehicles', getFriendVehicles);
 
 module.exports = router;

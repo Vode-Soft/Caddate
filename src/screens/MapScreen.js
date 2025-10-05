@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
+  SafeAreaView,
   TouchableOpacity,
   Alert,
   Dimensions,
@@ -13,9 +13,9 @@ import {
   Animated,
   AppState,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { Marker, PROVIDER_APPLE, PROVIDER_GOOGLE } from 'react-native-maps';
+// React Native Maps import'u
+import MapView, { Marker, Circle, PROVIDER_APPLE, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -47,13 +47,6 @@ export default function MapScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [mapType, setMapType] = useState('standard');
   const [showUserList, setShowUserList] = useState(false);
-  const [mapError, setMapError] = useState(null);
-  const [region, setRegion] = useState({
-    latitude: 40.9884, // Bağdat Caddesi koordinatları
-    longitude: 29.0255,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [lastLocationUpdate, setLastLocationUpdate] = useState(null);
   const [isTrackingLocation, setIsTrackingLocation] = useState(false);
@@ -64,7 +57,6 @@ export default function MapScreen() {
   // Animasyon değerleri
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
-  const speedAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let isMounted = true;
@@ -118,18 +110,6 @@ export default function MapScreen() {
 
     return unsubscribe;
   }, [navigation, isLocationSharing, location, shareLocationWithServer]);
-
-  // Location değiştiğinde region'ı güncelle
-  useEffect(() => {
-    if (location && location.latitude && location.longitude) {
-      setRegion({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
-    }
-  }, [location]);
 
   // Socket.io bağlantısı kurulduğunda yakındaki kullanıcıları iste
   useEffect(() => {
@@ -434,6 +414,10 @@ export default function MapScreen() {
       setLocationAccuracy(location.coords.accuracy);
       setLastLocationUpdate(new Date());
       
+      // İlk konum için lastLocation ve lastLocationTime'ı set et
+      setLastLocation(location);
+      setLastLocationTime(new Date().getTime());
+      
       // Konum paylaşımı aktifse sunucuya gönder
       if (isLocationSharing) {
         await shareLocationWithServer(location.coords);
@@ -451,7 +435,7 @@ export default function MapScreen() {
     
     setIsTrackingLocation(true);
     
-    // Her 10 saniyede bir konum güncelle (optimize edilmiş)
+    // Her 2 saniyede bir konum güncelle (çok hızlı)
     locationIntervalRef.current = setInterval(async () => {
       if (isLocationSharing && locationPermission) {
         try {
@@ -461,11 +445,11 @@ export default function MapScreen() {
             timeout: 2000,    // 2 saniye timeout
           });
           
-          // Hız hesapla
+          // Önce hız hesapla (eski lastLocation ile)
           const speed = calculateSpeed(location.coords);
           setCurrentSpeed(speed);
           
-          // Önceki konum bilgilerini güncelle
+          // Sonra önceki konum bilgilerini güncelle
           setLastLocation(location);
           setLastLocationTime(new Date().getTime());
           
@@ -483,7 +467,7 @@ export default function MapScreen() {
           }
         }
       }
-        }, 10000); // 10 saniyede bir güncelle - optimize edilmiş
+        }, 1000); // 1 saniyede bir güncelle - normal hız
   }, [isLocationSharing, locationPermission, isTrackingLocation, shareLocationWithServer]);
 
   const stopLocationTracking = useCallback(() => {
@@ -549,6 +533,14 @@ export default function MapScreen() {
 
       apiService.setToken(token);
       
+      // API bağlantısını test et
+      console.log('🔍 API bağlantısı test ediliyor...');
+      const connectionTest = await apiService.testConnection();
+      if (!connectionTest) {
+        console.error('❌ API bağlantısı başarısız, location share atlanıyor');
+        return;
+      }
+      
       // REST API ile konumu kaydet
       const response = await apiService.updateUserLocation({
         latitude: coords.latitude,
@@ -588,11 +580,6 @@ export default function MapScreen() {
     const newSharingState = !isLocationSharing;
     setIsLocationSharing(newSharingState);
 
-    // Konum paylaşımı açıldıysa ve konum varsa, hemen paylaş
-    if (newSharingState && location) {
-      await shareLocationWithServer(location);
-    }
-
     // Ayarları kaydet
     try {
       // Önce mevcut ayarları al
@@ -617,13 +604,11 @@ export default function MapScreen() {
         if (response.success) {
           console.log('Konum paylaşım ayarı başarıyla güncellendi:', newSharingState);
           
-          // Başarılı mesajı göster (sadece hata durumunda)
-          if (!response.success) {
-            Alert.alert(
-              'Başarılı', 
-              newSharingState ? 'Konum paylaşımı açıldı' : 'Konum paylaşımı kapatıldı'
-            );
-          }
+          // Başarılı mesajı göster
+          Alert.alert(
+            'Başarılı', 
+            newSharingState ? 'Konum paylaşımı açıldı' : 'Konum paylaşımı kapatıldı'
+          );
         } else {
           console.error('Settings update failed:', response.message);
           Alert.alert('Hata', 'Ayarlar güncellenirken bir hata oluştu');
@@ -641,6 +626,11 @@ export default function MapScreen() {
       
       // Hata durumunda eski duruma geri döndür
       setIsLocationSharing(!newSharingState);
+    }
+
+    // Konum paylaşımı açıldıysa ve konum varsa, hemen paylaş
+    if (newSharingState && location) {
+      await shareLocationWithServer(location);
     }
   };
 
@@ -661,10 +651,7 @@ export default function MapScreen() {
   }, [location]);
 
   const toggleMapType = () => {
-    const mapTypes = ['standard', 'satellite', 'hybrid'];
-    const currentIndex = mapTypes.indexOf(mapType);
-    const nextIndex = (currentIndex + 1) % mapTypes.length;
-    setMapType(mapTypes[nextIndex]);
+    setMapType(mapType === 'standard' ? 'satellite' : 'standard');
   };
 
   const handleUserLocationUpdate = useCallback((data) => {
@@ -732,63 +719,107 @@ export default function MapScreen() {
 
   // Mesafe hesaplama fonksiyonu
   const calculateDistance = (lat1, lng1, lat2, lng2) => {
-    const R = 6371000; // Dünya'nın yarıçapı (metre)
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-    
-    // GPS hatası düzeltmesi: Eğer mesafe 50 metreden azsa, çok daha az göster
-    if (distance < 50) {
-      return Math.max(distance * 0.2, 1); // GPS hatasını büyük oranda düzelt, minimum 1m
+    try {
+      // Koordinatların geçerli olduğunu kontrol et
+      if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) {
+        console.log('Distance calculation: Invalid coordinates');
+        return 0;
+      }
+
+      const R = 6371000; // Dünya'nın yarıçapı (metre)
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distance = R * c;
+      
+      // Mesafenin geçerli olduğunu kontrol et
+      if (isNaN(distance) || distance < 0) {
+        console.log('Distance calculation: Invalid distance result');
+        return 0;
+      }
+      
+      // GPS hatası düzeltmesi: Eğer mesafe 50 metreden azsa, çok daha az göster
+      if (distance < 50) {
+        return Math.max(distance * 0.2, 1); // GPS hatasını büyük oranda düzelt, minimum 1m
+      }
+      
+      return distance;
+    } catch (error) {
+      console.error('Distance calculation error:', error);
+      return 0;
     }
-    
-    return distance;
   };
 
   // Hız hesaplama fonksiyonu
   const calculateSpeed = (newLocation) => {
-    if (!newLocation || !lastLocation || !lastLocationTime) {
+    try {
+      // Gerekli verilerin varlığını kontrol et
+      if (!newLocation || !lastLocation || !lastLocationTime) {
+        console.log('Speed calculation: Missing required data');
+        return 0;
+      }
+
+      // Koordinatların geçerli olduğunu kontrol et
+      if (!newLocation.latitude || !newLocation.longitude || 
+          !lastLocation.latitude || !lastLocation.longitude ||
+          isNaN(newLocation.latitude) || isNaN(newLocation.longitude) ||
+          isNaN(lastLocation.latitude) || isNaN(lastLocation.longitude)) {
+        console.log('Speed calculation: Invalid coordinates');
+        return 0;
+      }
+
+      const now = new Date().getTime();
+      const timeDiff = (now - lastLocationTime) / 1000; // saniye cinsinden
+
+      // Zaman farkının geçerli olduğunu kontrol et
+      if (timeDiff <= 0 || timeDiff > 60) { // 1 dakikadan fazla geçmişse geçersiz
+        console.log('Speed calculation: Invalid time difference:', timeDiff);
+        return 0;
+      }
+
+      if (timeDiff < 1) {
+        return currentSpeed || 0; // Çok hızlı güncelleme, önceki hızı koru
+      }
+
+      const distance = calculateDistance(
+        lastLocation.latitude,
+        lastLocation.longitude,
+        newLocation.latitude,
+        newLocation.longitude
+      );
+
+      // Mesafenin geçerli olduğunu kontrol et
+      if (isNaN(distance) || distance < 0) {
+        console.log('Speed calculation: Invalid distance:', distance);
+        return 0;
+      }
+
+      if (distance < 1) {
+        return 0; // Çok küçük mesafe, hız 0
+      }
+
+      const speedMs = distance / timeDiff; // m/s
+      const speedKmh = speedMs * 3.6; // km/h
+
+      // Hızın geçerli olduğunu kontrol et
+      if (isNaN(speedKmh) || speedKmh < 0) {
+        console.log('Speed calculation: Invalid speed:', speedKmh);
+        return 0;
+      }
+
+      // Maksimum hız sınırı (300 km/h)
+      const finalSpeed = Math.min(speedKmh, 300);
+      console.log(`Speed calculated: ${finalSpeed.toFixed(1)} km/h (distance: ${distance.toFixed(1)}m, time: ${timeDiff.toFixed(1)}s)`);
+      
+      return finalSpeed;
+    } catch (error) {
+      console.error('Speed calculation error:', error);
       return 0;
     }
-
-    const now = new Date().getTime();
-    const timeDiff = (now - lastLocationTime) / 1000; // saniye cinsinden
-
-    if (timeDiff < 1) {
-      return currentSpeed; // Çok hızlı güncelleme, önceki hızı koru
-    }
-
-    const distance = calculateDistance(
-      lastLocation.latitude,
-      lastLocation.longitude,
-      newLocation.latitude,
-      newLocation.longitude
-    );
-
-    if (distance < 1) {
-      return 0; // Çok küçük mesafe, hız 0
-    }
-
-    const speedMs = distance / timeDiff; // m/s
-    const speedKmh = speedMs * 3.6; // km/h
-
-    // Maksimum hız sınırı (300 km/h)
-    return Math.min(speedKmh, 300);
   };
-
-  // Hız değiştiğinde animasyon
-  useEffect(() => {
-    Animated.spring(speedAnim, {
-      toValue: currentSpeed,
-      tension: 100,
-      friction: 8,
-      useNativeDriver: false,
-    }).start();
-  }, [currentSpeed]);
 
   const handleUserJoined = (data) => {
     console.log('User joined:', data);
@@ -800,8 +831,12 @@ export default function MapScreen() {
     );
   };
 
-
-
+  const region = {
+    latitude: location?.latitude || 40.9884, // Bağdat Caddesi koordinatları
+    longitude: location?.longitude || 29.0255,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  };
 
 
   if (isLoading) {
@@ -866,94 +901,146 @@ export default function MapScreen() {
           </View>
         </Animated.View>
 
-        {/* Map - Apple Maps (iOS) / Google Maps (Android) */}
+        {/* Map */}
         <View style={styles.map}>
-          <MapView
-            ref={mapRef}
-            style={styles.mapView}
-            provider={Platform.OS === 'ios' ? PROVIDER_APPLE : PROVIDER_GOOGLE}
-            mapType={mapType}
-            region={region}
-            showsUserLocation={true}
-            showsMyLocationButton={false}
-            showsCompass={true}
-            showsScale={true}
-            showsBuildings={true}
-            showsTraffic={false}
-            showsIndoors={true}
-            onRegionChangeComplete={setRegion}
-            onMapReady={() => {
-              console.log('🗺️ Map is ready');
-              if (location) {
-                centerOnUserLocation();
-              }
-            }}
-          >
-            {/* Kullanıcının kendi konumu */}
-            {location && (
-              <Marker
-                coordinate={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                }}
-                title="Sizin Konumunuz"
-                description={`Doğruluk: ${Math.round(locationAccuracy || 0)}m`}
-                pinColor={colors.primary}
-              >
-                <View style={styles.userMarker}>
-                  <Ionicons name="person" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                </View>
-              </Marker>
-            )}
-
-            {/* Yakındaki diğer kullanıcılar */}
-            {nearbyUsers.map((user, index) => {
-              if (!user.location || !user.location.latitude || !user.location.longitude) {
-                return null;
-              }
-              
-              return (
+          {Platform.OS === 'ios' ? (
+            // iOS: Apple Maps
+            <MapView
+              ref={mapRef}
+              style={styles.mapView}
+              provider={PROVIDER_APPLE}
+              mapType={mapType}
+              initialRegion={region}
+              showsUserLocation={true}
+              showsMyLocationButton={false}
+              showsCompass={true}
+              showsScale={true}
+              showsBuildings={true}
+              showsTraffic={false}
+              showsIndoors={true}
+              onRegionChangeComplete={(region) => {
+                // Bölge değişikliklerini takip et
+              }}
+            >
+              {/* Kullanıcının kendi konumu */}
+              {location && location.latitude && location.longitude && (
                 <Marker
-                  key={user.userId || index}
                   coordinate={{
-                    latitude: parseFloat(user.location.latitude),
-                    longitude: parseFloat(user.location.longitude),
+                    latitude: location.latitude,
+                    longitude: location.longitude,
                   }}
-                  title={`${user.firstName || user.first_name || 'Kullanıcı'} ${user.lastName || user.last_name || ''}`}
-                  description={
-                    user.distance 
-                      ? `${Math.round(user.distance)}m uzaklıkta` 
-                      : 'Yakında'
-                  }
-                  pinColor={colors.secondary}
+                  title="Konumunuz"
+                  description={`Doğruluk: ${locationAccuracy ? Math.round(locationAccuracy) : 'N/A'}m`}
+                  pinColor={colors.primary}
                 >
-                  <View style={styles.otherUserMarker}>
-                    <Ionicons name="person" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                  <View style={styles.userMarker}>
+                    <Ionicons name="person" size={isTablet ? 24 : 20} color="#FFFFFF" />
                   </View>
                 </Marker>
-              );
-            })}
-          </MapView>
+              )}
+
+
+              {/* Diğer kullanıcıların konumları */}
+              {nearbyUsers.map((user, index) => {
+                // Sadece geçerli konum verilerine sahip kullanıcıları göster
+                if (!user.location || !user.location.latitude || !user.location.longitude) {
+                  return null;
+                }
+                
+                console.log(`📍 User ${index} data:`, {
+                  userId: user.userId,
+                  firstName: user.firstName,
+                  first_name: user.first_name,
+                  lastName: user.lastName,
+                  last_name: user.last_name,
+                  location: user.location
+                });
+                
+                return (
+                  <Marker
+                    key={user.userId}
+                    coordinate={{
+                      latitude: user.location.latitude,
+                      longitude: user.location.longitude,
+                    }}
+                    title={`${user.firstName || user.first_name || `Kullanıcı ${index + 1}`} ${user.lastName || user.last_name || ''}`}
+                    description={`${user.distance ? `${Math.round(user.distance)}m uzaklıkta` : 'Yakında'} • ${user.isOnline ? 'Çevrimiçi' : `Son görülme: ${new Date(user.lastSeen).toLocaleTimeString()}`}`}
+                    pinColor={colors.secondary}
+                  >
+                    <View style={styles.otherUserMarker}>
+                      <Ionicons name="person" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                    </View>
+                  </Marker>
+                );
+              })}
+
+              {/* Kullanıcının konum doğruluğu için daire */}
+              {location && location.latitude && location.longitude && locationAccuracy && (
+                <Circle
+                  center={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  radius={locationAccuracy}
+                  strokeColor={colors.primary + '40'}
+                  fillColor={colors.primary + '20'}
+                  strokeWidth={2}
+                />
+              )}
+            </MapView>
+          ) : (
+            // Android: Placeholder
+            <View style={[styles.mapView, styles.androidPlaceholder]}>
+              <View style={styles.placeholderContent}>
+                <Ionicons name="map-outline" size={64} color={colors.primary} />
+                <Text style={styles.placeholderTitle}>Harita</Text>
+                <Text style={styles.placeholderSubtitle}>
+                  {Platform.OS === 'ios' ? 'iOS için harita yükleniyor...' : 'Android için harita özelliği yakında gelecek'}
+                </Text>
+                <Text style={styles.placeholderInfo}>
+                  Konumunuz: {location && location.latitude && location.longitude ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 'Alınıyor...'}
+                </Text>
+                <Text style={styles.placeholderInfo}>
+                  Yakındaki kullanıcılar: {nearbyUsers.length}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.placeholderButton}
+                  onPress={toggleLocationSharing}
+                >
+                  <Ionicons 
+                    name={isLocationSharing ? 'location' : 'location-outline'} 
+                    size={20} 
+                    color="#FFFFFF" 
+                  />
+                  <Text style={styles.placeholderButtonText}>
+                    {isLocationSharing ? 'Konum Paylaşımını Durdur' : 'Konum Paylaşımını Başlat'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Hız Göstergesi - Sol Üst */}
-        <Animated.Text style={[
-          styles.speedIndicator,
-          {
-            transform: [{
-              scale: speedAnim.interpolate({
-                inputRange: [0, 100],
-                outputRange: [1, 1.05],
-                extrapolate: 'clamp',
-              })
-            }],
-            color: currentSpeed > 50 ? '#FF6B6B' : currentSpeed > 20 ? '#FFD93D' : '#4ECDC4',
-          }
-        ]}>
-          {Math.round(currentSpeed)} km/h
-        </Animated.Text>
+        <View style={styles.speedIndicator}>
+          <View style={styles.speedContainer}>
+            <Text style={styles.speedValue}>
+              {isNaN(currentSpeed) ? 0 : Math.round(currentSpeed)}
+            </Text>
+            <Text style={styles.speedUnit}>km/h</Text>
+          </View>
+          <View style={styles.speedStatus}>
+            <View style={[
+              styles.speedDot,
+              { backgroundColor: (isNaN(currentSpeed) ? 0 : currentSpeed) > 5 ? colors.success : colors.warning }
+            ]} />
+            <Text style={styles.speedStatusText}>
+              {(isNaN(currentSpeed) ? 0 : currentSpeed) > 5 ? 'Hareket Halinde' : 'Durmakta'}
+            </Text>
+          </View>
+        </View>
 
-        {/* Kontrol Butonları */}
+        {/* Kontrol Butonları - Alt Sağ */}
         <Animated.View 
           style={[
             styles.controlButtons,
@@ -963,66 +1050,63 @@ export default function MapScreen() {
             }
           ]}
         >
+          <View style={styles.controlButtonsContainer}>
+            {/* Konuma Odaklan Butonu */}
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={centerOnUserLocation}
+            >
+              <Ionicons name="locate" size={isTablet ? 28 : 24} color={colors.primary} />
+            </TouchableOpacity>
 
-          {/* Konuma Odaklan Butonu */}
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={centerOnUserLocation}
-          >
-            <Ionicons name="locate" size={isTablet ? 28 : 24} color={colors.primary} />
-          </TouchableOpacity>
+            {/* Harita Türü Değiştir Butonu */}
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={toggleMapType}
+            >
+              <Ionicons
+                name={mapType === 'standard' ? 'map' : 'globe'}
+                size={isTablet ? 28 : 24}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
 
-          {/* Harita Türü Değiştir Butonu */}
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={toggleMapType}
-          >
-            <Ionicons
-              name={
-                mapType === 'standard' ? 'map' : 
-                mapType === 'satellite' ? 'globe' : 
-                'layers'
-              }
-              size={isTablet ? 28 : 24}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
-
-          {/* Kullanıcı Listesi Butonu */}
-          <TouchableOpacity
-            style={[
-              styles.controlButton,
-              showUserList && styles.controlButtonActive
-            ]}
-            onPress={() => {
-              const newShowUserList = !showUserList;
-              setShowUserList(newShowUserList);
-              
-              // Eğer liste açılıyorsa ve socket bağlıysa yakındaki kullanıcıları iste
-              if (newShowUserList && socketService.isSocketConnected()) {
-                console.log('📍 User list opened, requesting nearby users...');
-                console.log('📍 Socket connected:', socketService.isSocketConnected());
-                socketService.requestNearbyUsers(5000, 100);
-              } else if (newShowUserList && !socketService.isSocketConnected()) {
-                console.log('⚠️ Socket not connected, trying to connect...');
-                socketService.connect();
-                // Bağlantı kurulduktan sonra yakındaki kullanıcıları iste
-                setTimeout(() => {
-                  if (socketService.isSocketConnected()) {
-                    console.log('📍 Socket connected, requesting nearby users...');
-                    socketService.requestNearbyUsers(5000, 100);
-                  }
-                }, 2000);
-              }
-            }}
-          >
-            <Ionicons name="people" size={isTablet ? 28 : 24} color={showUserList ? '#FFFFFF' : colors.primary} />
-            {nearbyUsers.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{nearbyUsers.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+            {/* Kullanıcı Listesi Butonu */}
+            <TouchableOpacity
+              style={[
+                styles.controlButton,
+                showUserList && styles.controlButtonActive
+              ]}
+              onPress={() => {
+                const newShowUserList = !showUserList;
+                setShowUserList(newShowUserList);
+                
+                // Eğer liste açılıyorsa ve socket bağlıysa yakındaki kullanıcıları iste
+                if (newShowUserList && socketService.isSocketConnected()) {
+                  console.log('📍 User list opened, requesting nearby users...');
+                  console.log('📍 Socket connected:', socketService.isSocketConnected());
+                  socketService.requestNearbyUsers(5000, 100);
+                } else if (newShowUserList && !socketService.isSocketConnected()) {
+                  console.log('⚠️ Socket not connected, trying to connect...');
+                  socketService.connect();
+                  // Bağlantı kurulduktan sonra yakındaki kullanıcıları iste
+                  setTimeout(() => {
+                    if (socketService.isSocketConnected()) {
+                      console.log('📍 Socket connected, requesting nearby users...');
+                      socketService.requestNearbyUsers(5000, 100);
+                    }
+                  }, 2000);
+                }
+              }}
+            >
+              <Ionicons name="people" size={isTablet ? 28 : 24} color={showUserList ? '#FFFFFF' : colors.primary} />
+              {nearbyUsers.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{nearbyUsers.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* Kullanıcı Listesi */}
@@ -1124,10 +1208,18 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 24,
   },
   headerBackground: {
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    backdropFilter: 'blur(20px)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backdropFilter: 'blur(25px)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1143,52 +1235,70 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerIcon: {
-    width: scale(isTablet ? 44 : 36),
-    height: scale(isTablet ? 44 : 36),
-    borderRadius: scale(isTablet ? 22 : 18),
+    width: scale(isTablet ? 48 : 40),
+    height: scale(isTablet ? 48 : 40),
+    borderRadius: scale(isTablet ? 24 : 20),
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: scale(isTablet ? 12 : 10),
+    marginRight: scale(isTablet ? 14 : 12),
     shadowColor: colors.primary,
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   headerTitle: {
-    fontSize: scaleFont(isTablet ? 20 : 16),
-    fontWeight: '700',
+    fontSize: scaleFont(isTablet ? 22 : 18),
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   headerSubtitle: {
-    fontSize: scaleFont(isTablet ? 12 : 10),
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 1,
-    fontWeight: '500',
+    fontSize: scaleFont(isTablet ? 13 : 11),
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+    fontWeight: '600',
+    opacity: 0.9,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   locationToggleButton: {
-    width: scale(isTablet ? 40 : 34),
-    height: scale(isTablet ? 40 : 34),
-    borderRadius: scale(isTablet ? 20 : 17),
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    width: scale(isTablet ? 44 : 38),
+    height: scale(isTablet ? 44 : 38),
+    borderRadius: scale(isTablet ? 22 : 19),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: scale(isTablet ? 10 : 8),
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginRight: scale(isTablet ? 12 : 10),
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   locationToggleButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   statusIndicator: {
     width: scale(isTablet ? 12 : 10),
@@ -1203,16 +1313,24 @@ const styles = StyleSheet.create({
   },
   speedIndicator: {
     position: 'absolute',
-    left: scale(isTablet ? 24 : 16),
-    top: Platform.OS === 'ios' ? 44 + verticalScale(isTablet ? 90 : 70) : (StatusBar.currentHeight || 24) + verticalScale(isTablet ? 90 : 70),
+    left: scale(isTablet ? 24 : isSmallScreen ? 12 : 16),
+    top: Platform.OS === 'ios' ? 44 + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70) : (StatusBar.currentHeight || 24) + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70),
     zIndex: 1000,
-    fontSize: scaleFont(isTablet ? 24 : 20),
-    fontWeight: '800',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-    letterSpacing: -0.5,
-    textAlign: 'left',
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    borderRadius: scale(isTablet ? 20 : isSmallScreen ? 14 : 16),
+    padding: scale(isTablet ? 20 : isSmallScreen ? 12 : 16),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minWidth: scale(isTablet ? 140 : isSmallScreen ? 100 : 120),
+    backdropFilter: 'blur(20px)',
   },
   speedContainer: {
     alignItems: 'center',
@@ -1221,23 +1339,18 @@ const styles = StyleSheet.create({
   speedValue: {
     fontSize: scaleFont(isTablet ? 36 : 28),
     fontWeight: '800',
+    color: colors.primary,
     lineHeight: scaleFont(isTablet ? 40 : 32),
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-    letterSpacing: -0.5,
-    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   speedUnit: {
     fontSize: scaleFont(isTablet ? 16 : 14),
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: verticalScale(isTablet ? -6 : -4),
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    color: colors.text.secondary,
+    marginTop: verticalScale(isTablet ? -4 : -2),
+    opacity: 0.8,
   },
   speedStatus: {
     flexDirection: 'row',
@@ -1253,37 +1366,57 @@ const styles = StyleSheet.create({
   speedStatusText: {
     fontSize: scaleFont(isTablet ? 13 : 11),
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.95)',
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-    letterSpacing: 0.3,
+    color: colors.text.secondary,
+    opacity: 0.9,
   },
   controlButtons: {
     position: 'absolute',
-    right: scale(isTablet ? 24 : 16),
-    bottom: verticalScale(isTablet ? 120 : 100),
+    right: scale(isTablet ? 24 : isSmallScreen ? 12 : 16),
+    bottom: verticalScale(isTablet ? 120 : isSmallScreen ? 80 : 100),
     zIndex: 1000,
   },
-  controlButton: {
-    width: scale(isTablet ? 60 : 50),
-    height: scale(isTablet ? 60 : 50),
-    borderRadius: scale(isTablet ? 30 : 25),
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(isTablet ? 15 : 10),
+  controlButtonsContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    borderRadius: scale(isTablet ? 30 : isSmallScreen ? 20 : 25),
+    padding: scale(isTablet ? 8 : isSmallScreen ? 4 : 6),
     shadowColor: colors.shadow.dark,
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 8,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(20px)',
+  },
+  controlButton: {
+    width: scale(isTablet ? 56 : isSmallScreen ? 40 : 46),
+    height: scale(isTablet ? 56 : isSmallScreen ? 40 : 46),
+    borderRadius: scale(isTablet ? 28 : isSmallScreen ? 20 : 23),
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: scale(isTablet ? 4 : isSmallScreen ? 2 : 3),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   controlButtonActive: {
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   badge: {
     position: 'absolute',
@@ -1303,26 +1436,27 @@ const styles = StyleSheet.create({
   },
   userList: {
     position: 'absolute',
-    bottom: verticalScale(isTablet ? 100 : 90),
+    bottom: verticalScale(isTablet ? 40 : 20),
     left: getResponsivePadding(isTablet ? 30 : 20),
     right: getResponsivePadding(isTablet ? 30 : 20),
     maxHeight: verticalScale(isTablet ? 400 : 300),
     zIndex: 1000,
   },
   userListContent: {
-    backgroundColor: colors.surface,
-    borderRadius: scale(isTablet ? 20 : 15),
-    padding: scale(isTablet ? 20 : 15),
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    borderRadius: scale(isTablet ? 24 : 18),
+    padding: scale(isTablet ? 24 : 18),
     shadowColor: colors.shadow.dark,
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 12,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: colors.border.light,
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(20px)',
   },
   userListHeader: {
     flexDirection: 'row',
@@ -1331,38 +1465,55 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(isTablet ? 20 : 15),
   },
   userListTitle: {
-    fontSize: scaleFont(isTablet ? 22 : 18),
-    fontWeight: 'bold',
+    fontSize: scaleFont(isTablet ? 24 : 20),
+    fontWeight: '800',
     color: colors.text.primary,
+    letterSpacing: 0.3,
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: verticalScale(isTablet ? 15 : 10),
+    paddingVertical: verticalScale(isTablet ? 18 : 12),
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: scale(isTablet ? 12 : 8),
+    marginVertical: verticalScale(isTablet ? 4 : 2),
+    paddingHorizontal: scale(isTablet ? 12 : 8),
   },
   userAvatar: {
-    width: scale(isTablet ? 50 : 40),
-    height: scale(isTablet ? 50 : 40),
-    borderRadius: scale(isTablet ? 25 : 20),
+    width: scale(isTablet ? 54 : 44),
+    height: scale(isTablet ? 54 : 44),
+    borderRadius: scale(isTablet ? 27 : 22),
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: scale(isTablet ? 20 : 15),
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: scaleFont(isTablet ? 20 : 16),
-    fontWeight: '600',
+    fontSize: scaleFont(isTablet ? 22 : 18),
+    fontWeight: '700',
     color: colors.text.primary,
+    letterSpacing: 0.2,
   },
   userLastSeen: {
-    fontSize: scaleFont(isTablet ? 14 : 12),
+    fontSize: scaleFont(isTablet ? 15 : 13),
     color: colors.text.secondary,
     marginTop: scale(isTablet ? 4 : 2),
+    fontWeight: '500',
+    opacity: 0.8,
   },
   userStatus: {
     alignItems: 'center',
@@ -1426,101 +1577,57 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  // iOS Map Container
-  iosMapContainer: {
-    flex: 1,
+  // Android placeholder styles
+  androidPlaceholder: {
     backgroundColor: colors.background,
-  },
-  // Android Map Container
-  androidMapContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  mapPlaceholder: {
-    flex: 1,
-    padding: scale(20),
     justifyContent: 'center',
     alignItems: 'center',
   },
-  mapPlaceholderTitle: {
+  placeholderContent: {
+    alignItems: 'center',
+    paddingHorizontal: getResponsivePadding(40),
+  },
+  placeholderTitle: {
     fontSize: scaleFont(24),
     fontWeight: 'bold',
     color: colors.text.primary,
     marginTop: verticalScale(20),
     marginBottom: verticalScale(10),
-    textAlign: 'center',
   },
-  mapPlaceholderSubtitle: {
-    fontSize: scaleFont(18),
+  placeholderSubtitle: {
+    fontSize: scaleFont(16),
     color: colors.text.secondary,
-    marginBottom: verticalScale(10),
     textAlign: 'center',
-    fontWeight: '600',
+    marginBottom: verticalScale(20),
+    lineHeight: scaleFont(22),
   },
-  mapPlaceholderInfo: {
+  placeholderInfo: {
     fontSize: scaleFont(14),
     color: colors.text.tertiary,
-    marginBottom: verticalScale(30),
     textAlign: 'center',
-    lineHeight: scaleFont(20),
-  },
-  locationInfo: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: scale(15),
-    padding: scale(20),
-    marginBottom: verticalScale(20),
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: verticalScale(10),
-  },
-  locationText: {
-    fontSize: scaleFont(16),
-    color: colors.text.primary,
-    marginLeft: scale(10),
-    flex: 1,
-  },
-  nearbyUsersInfo: {
-    width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: scale(15),
-    padding: scale(20),
-    marginBottom: verticalScale(20),
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  nearbyUsersTitle: {
-    fontSize: scaleFont(18),
-    fontWeight: 'bold',
-    color: colors.text.primary,
-    marginBottom: verticalScale(15),
-  },
-  nearbyUserItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: verticalScale(8),
-    paddingVertical: verticalScale(5),
   },
-  nearbyUserName: {
+  placeholderButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: getResponsivePadding(24),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(25),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: verticalScale(20),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  placeholderButtonText: {
+    color: '#FFFFFF',
     fontSize: scaleFont(16),
-    color: colors.text.primary,
-    marginLeft: scale(10),
-    flex: 1,
-  },
-  nearbyUserDistance: {
-    fontSize: scaleFont(14),
-    color: colors.text.secondary,
     fontWeight: '600',
-  },
-  moreUsersText: {
-    fontSize: scaleFont(14),
-    color: colors.text.tertiary,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: verticalScale(5),
+    marginLeft: scale(8),
   },
 });

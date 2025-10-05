@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  SafeAreaView,
   FlatList,
   TouchableOpacity,
   TextInput,
@@ -11,8 +12,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
@@ -35,7 +36,6 @@ export default function LocalChatScreen({ navigation }) {
   const [messages, setMessages] = useState([]);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const flatListRef = useRef(null);
 
@@ -43,312 +43,237 @@ export default function LocalChatScreen({ navigation }) {
   useEffect(() => {
     const loadCurrentUser = async () => {
       try {
+        console.log('👤 LocalChatScreen: Kullanıcı bilgileri yükleniyor...');
         const token = await apiService.getStoredToken();
+        
         if (token) {
           apiService.setToken(token);
           const response = await apiService.getProfile();
-          if (response.success) {
-            setCurrentUser(response.data);
+          
+          if (response.success && response.data && response.data.user) {
+            console.log('👤 LocalChatScreen: Kullanıcı bilgileri yüklendi:', response.data.user);
+            setCurrentUser(response.data.user);
           }
         }
       } catch (error) {
-        console.error('Kullanıcı bilgileri yüklenemedi:', error);
+        console.error('👤 LocalChatScreen: Kullanıcı bilgileri yüklenemedi:', error);
       }
     };
     
     loadCurrentUser();
   }, []);
 
-  // Mesaj geçmişini yükle
-  const loadMessageHistory = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const token = await apiService.getStoredToken();
-      if (!token) {
-        console.log('Token bulunamadı, mesaj geçmişi yüklenemiyor');
-        return;
-      }
-      
-      apiService.setToken(token);
-      const response = await apiService.get('/chat/history?room=general&limit=50');
-      
-      if (response.success && response.data) {
-        const formattedMessages = response.data.map(msg => {
-          const isOwn = currentUser && 
-                       currentUser.id && 
-                       msg.senderId && 
-                       String(msg.senderId) === String(currentUser.id);
-          
-          return {
-            id: `${msg.senderId}-${msg.timestamp}`,
-            user: msg.senderName || `Kullanıcı ${String(msg.senderId || 'unknown').slice(-4)}`,
-            message: msg.message,
-            time: new Date(msg.timestamp).toLocaleTimeString('tr-TR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            }),
-            avatar: '👤',
-            senderId: msg.senderId,
-            isOwn: isOwn,
-          };
-        });
-        
-        setMessages(formattedMessages.reverse());
-        console.log(`${formattedMessages.length} mesaj yüklendi`);
-      }
-    } catch (error) {
-      console.error('Mesaj geçmişi yüklenirken hata:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentUser]);
-
-  // Event handler'ları useCallback ile tanımla
-  const handleMessageReceived = useCallback((data) => {
-    console.log('🔔🔔🔔 LocalChatScreen: YENİ MESAJ ALINDI!', data);
-    console.log('🔔 LocalChatScreen: Current user ID:', currentUser?.id);
-    console.log('🔔 LocalChatScreen: Sender ID:', data.senderId);
-    console.log('🔔 LocalChatScreen: Data type check - senderId:', typeof data.senderId, data.senderId);
-    console.log('🔔 LocalChatScreen: Data type check - currentUser.id:', typeof currentUser?.id, currentUser?.id);
-    console.log('🔔 LocalChatScreen: Socket connected:', isSocketConnected);
-    
-    // Güvenli string dönüşümü
-    const currentUserId = currentUser?.id ? String(currentUser.id) : null;
-    const senderId = data.senderId ? String(data.senderId) : null;
-    
-    console.log('🔔 LocalChatScreen: String dönüşümü - currentUserId:', currentUserId);
-    console.log('🔔 LocalChatScreen: String dönüşümü - senderId:', senderId);
-    
-    // Kendi mesajımızı filtrele - optimistic update zaten eklenmiş
-    if (currentUserId && senderId && currentUserId === senderId) {
-      console.log('🔔 LocalChatScreen: Kendi mesajımız (socket\'ten), eklenmiyor - zaten optimistic update ile eklendi');
-      return;
-    }
-    
-    const timestamp = data.timestamp || new Date().toISOString();
-    const safeSenderId = senderId || 'unknown';
-    const newMessage = {
-      id: `socket-${safeSenderId}-${timestamp}`,
-      user: data.senderEmail || `Kullanıcı ${safeSenderId.slice(-4)}`,
-      message: data.message || '',
-      time: new Date(timestamp).toLocaleTimeString('tr-TR', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      }),
-      avatar: '👤',
-      senderId: data.senderId,
-      isOwn: false,
-      timestamp: timestamp,
-    };
-    
-    console.log('🔔 LocalChatScreen: Yeni mesaj oluşturuldu:', newMessage);
-    
-    setMessages(prev => {
-      console.log('🔔 LocalChatScreen: Mevcut mesaj sayısı:', prev.length);
-      console.log('🔔 LocalChatScreen: Yeni mesaj ID:', newMessage.id);
-      console.log('🔔 LocalChatScreen: Yeni mesaj senderId:', newMessage.senderId);
-      console.log('🔔 LocalChatScreen: Yeni mesaj message:', newMessage.message);
-      
-      // Duplicate mesajları kontrol et - çok güçlü kontrol
-      const exists = prev.some(msg => {
-        const isSameId = msg.id === newMessage.id;
-        const isSameSenderAndMessage = msg.senderId === newMessage.senderId && 
-                                      msg.message === newMessage.message;
-        const isSameSenderAndTime = msg.senderId === newMessage.senderId && 
-                                   Math.abs(new Date(msg.time).getTime() - new Date(newMessage.time).getTime()) < 2000;
-        
-        console.log('🔔 LocalChatScreen: Duplicate kontrol:', {
-          msgId: msg.id,
-          newId: newMessage.id,
-          isSameId,
-          msgSender: msg.senderId,
-          newSender: newMessage.senderId,
-          msgMessage: msg.message,
-          newMessage: newMessage.message,
-          isSameSenderAndMessage,
-          isSameSenderAndTime
-        });
-        
-        return isSameId || isSameSenderAndMessage || isSameSenderAndTime;
-      });
-      
-      if (exists) {
-        console.log('🔔 LocalChatScreen: Mesaj zaten mevcut, eklenmiyor');
-        return prev;
-      }
-      console.log('🔔 LocalChatScreen: Mesaj listeye ekleniyor');
-      const updatedMessages = [...prev, newMessage];
-      console.log('🔔 LocalChatScreen: Güncellenmiş mesaj sayısı:', updatedMessages.length);
-      return updatedMessages;
-    });
-  }, [currentUser]);
-
-  const handleOnlineUsersList = useCallback((users) => {
-    console.log('LocalChatScreen: Online kullanıcı listesi alındı:', users);
-    setOnlineUsers(users);
-  }, []);
-
-  const handleUserJoined = useCallback((data) => {
-    console.log('LocalChatScreen: Kullanıcı katıldı:', data);
-    setOnlineUsers(prev => [...prev, data]);
-  }, []);
-
-  const handleUserLeft = useCallback((data) => {
-    console.log('LocalChatScreen: Kullanıcı ayrıldı:', data);
-    setOnlineUsers(prev => prev.filter(user => user.userId !== data.userId));
-  }, []);
-
-  const handleConnectionError = useCallback((error) => {
-    console.error('Socket bağlantı hatası:', error);
-    setIsSocketConnected(false);
-    Alert.alert('Bağlantı Hatası', 'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
-  }, []);
-
-  const handleConnectionStatus = useCallback((data) => {
-    console.log('Socket bağlantı durumu:', data);
-    setIsSocketConnected(data.connected);
-  }, []);
-
-  // Socket.io bağlantısını yönet
+  // Socket bağlantısını başlat
   useEffect(() => {
     console.log('🔌 LocalChatScreen: Socket bağlantısı başlatılıyor...');
     
     // Socket bağlantısını başlat
     socketService.connect();
 
-    // Socket bağlantısını kontrol et ve odaya katıl
+    // Socket bağlantı durumunu kontrol et
     const checkConnection = () => {
       const connected = socketService.isSocketConnected();
+      console.log('🔌 LocalChatScreen: Socket bağlantı durumu:', connected);
+      setIsSocketConnected(connected);
+      
       if (connected) {
         console.log('🔌 LocalChatScreen: Socket bağlantısı kuruldu');
-        setIsSocketConnected(true);
         // Genel odaya katıl
         socketService.joinRoom('general');
-        console.log('🔌 LocalChatScreen: General room\'a katıldı');
         // Kullanıcı durumunu online olarak güncelle
         socketService.updateUserStatus('online');
-        console.log('🔌 LocalChatScreen: Kullanıcı durumu online olarak güncellendi');
       } else {
-        console.log('🔌 LocalChatScreen: Socket bağlantısı yok, tekrar denenecek...');
-        setIsSocketConnected(false);
-        // Kısa bir süre sonra tekrar kontrol et
-        setTimeout(checkConnection, 1000);
+        console.log('🔌 LocalChatScreen: Socket bağlantısı yok, tekrar deneniyor...');
+        // Socket bağlantısını tekrar başlat
+        socketService.connect();
+        // 500ms sonra tekrar kontrol et
+        setTimeout(() => {
+          checkConnection();
+        }, 500);
       }
     };
 
     // İlk kontrol
     checkConnection();
 
+    // Periyodik kontrol - çok sık kontrol et
+    const connectionInterval = setInterval(checkConnection, 1000);
+
     // Event listener'ları kaydet
-    console.log('🔌 LocalChatScreen: Event listener\'lar kaydediliyor...');
-    socketService.on('message_received', handleMessageReceived);
-    socketService.on('connection_error', handleConnectionError);
-    socketService.on('connection_status', handleConnectionStatus);
-    socketService.on('online_users_list', handleOnlineUsersList);
-    socketService.on('user_joined', handleUserJoined);
-    socketService.on('user_left', handleUserLeft);
-    console.log('🔌 LocalChatScreen: Event listener\'lar kaydedildi');
-    console.log('🔌 LocalChatScreen: message_received listener kaydedildi:', typeof handleMessageReceived);
-
-    // Cleanup function
-    return () => {
-      console.log('🔌 LocalChatScreen: Event listener\'lar temizleniyor...');
-      socketService.off('message_received', handleMessageReceived);
-      socketService.off('connection_error', handleConnectionError);
-      socketService.off('connection_status', handleConnectionStatus);
-      socketService.off('online_users_list', handleOnlineUsersList);
-      socketService.off('user_joined', handleUserJoined);
-      socketService.off('user_left', handleUserLeft);
-    };
-  }, []); // Dependency array'i boş bırakıyoruz
-
-  // currentUser yüklendikten sonra mesaj geçmişini yükle
-  useEffect(() => {
-    if (currentUser && isSocketConnected) {
-      loadMessageHistory();
-    }
-  }, [currentUser, isSocketConnected, loadMessageHistory]);
-
-  // Component unmount olduğunda socket bağlantısını kapat
-  useEffect(() => {
-    return () => {
-      socketService.disconnect();
-    };
-  }, []);
-
-  const sendMessage = async () => {
-    if (message.trim()) {
-      const messageText = message.trim();
-      console.log('📤 LocalChatScreen: Mesaj gönderiliyor:', messageText);
+    const handleMessageReceived = (data) => {
+      console.log('🔔 LocalChatScreen: YENİ MESAJ ALINDI!', data);
       
-      // Socket bağlantısını kontrol et
-      if (!isSocketConnected) {
-        console.log('📤 LocalChatScreen: Socket bağlantısı yok, mesaj gönderilemiyor');
-        Alert.alert('Bağlantı Hatası', 'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+      // Kendi mesajımızı filtrele
+      if (currentUser && data.senderId && String(data.senderId) === String(currentUser.id)) {
+        console.log('🔔 LocalChatScreen: Kendi mesajımız, eklenmiyor');
         return;
       }
       
-      // Kendi mesajınızı hemen ekleyin (optimistic update)
-      const userId = currentUser?.id ? String(currentUser.id) : 'unknown';
-      const userName = currentUser ? 
-        `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() : 
-        'Sen';
+      // Profil fotoğrafı URL'sini tam URL'ye çevir
+      let profilePictureUrl = data.profilePicture || null;
+      if (profilePictureUrl && profilePictureUrl.startsWith('/uploads/')) {
+        // API base URL'ini al ve profil fotoğrafı URL'sini tamamla
+        const apiBaseUrl = apiService.baseURL.replace('/api', '');
+        profilePictureUrl = `${apiBaseUrl}${profilePictureUrl}`;
+      }
       
-      const timestamp = Date.now();
       const newMessage = {
-        id: `own-${userId}-${timestamp}`,
-        user: userName,
-        message: messageText,
-        time: new Date(timestamp).toLocaleTimeString('tr-TR', { 
+        id: `socket-${data.senderId}-${Date.now()}`,
+        user: data.senderName || `Kullanıcı ${data.senderId}`,
+        message: data.message || '',
+        time: new Date().toLocaleTimeString('tr-TR', { 
           hour: '2-digit', 
           minute: '2-digit' 
         }),
-        avatar: '👤',
-        senderId: userId,
-        isOwn: true,
-        timestamp: new Date(timestamp).toISOString(),
+        avatar: '👤', // Fallback avatar
+        profilePicture: profilePictureUrl,
+        senderId: data.senderId,
+        isOwn: false,
       };
       
-      console.log('📤 LocalChatScreen: Optimistic update - mesaj eklendi:', newMessage);
+      console.log('🔔 LocalChatScreen: Mesaj listeye ekleniyor:', newMessage);
       setMessages(prev => [...prev, newMessage]);
+    };
+
+    const handleConnectionStatus = (data) => {
+      console.log('🔌 LocalChatScreen: Socket bağlantı durumu:', data);
+      setIsSocketConnected(data.connected);
+    };
+
+    // Event listener'ları kaydet
+    socketService.on('message_received', handleMessageReceived);
+    socketService.on('connection_status', handleConnectionStatus);
+
+    // Cleanup
+    return () => {
+      clearInterval(connectionInterval);
+      socketService.off('message_received', handleMessageReceived);
+      socketService.off('connection_status', handleConnectionStatus);
+    };
+  }, [currentUser]);
+
+  // Mesaj geçmişini yükle
+  useEffect(() => {
+    const loadMessageHistory = async () => {
+      if (!currentUser || !isSocketConnected) return;
       
-      // Backend'e mesajı kaydet
       try {
+        setIsLoading(true);
         const token = await apiService.getStoredToken();
+        
         if (token) {
           apiService.setToken(token);
-          console.log('📤 LocalChatScreen: Backend\'e mesaj kaydediliyor...');
-          const response = await apiService.post('/chat/send', {
-            message: messageText,
-            room: 'general'
-          });
+          const response = await apiService.get('/chat/history?room=general&limit=50');
           
-          if (response.success) {
-            console.log('📤 LocalChatScreen: Mesaj backend\'e kaydedildi');
+          if (response.success && response.data) {
+            const formattedMessages = response.data.map(msg => {
+              const isOwn = currentUser && 
+                           currentUser.id && 
+                           msg.senderId && 
+                           String(msg.senderId) === String(currentUser.id);
+              
+              // Kullanıcı adını oluştur
+              let userName = 'Bilinmeyen Kullanıcı';
+              if (msg.senderName) {
+                userName = msg.senderName;
+              } else if (msg.senderFirstName && msg.senderLastName) {
+                userName = `${msg.senderFirstName} ${msg.senderLastName}`.trim();
+              } else if (msg.senderFirstName) {
+                userName = msg.senderFirstName;
+              } else if (msg.senderId) {
+                userName = `Kullanıcı ${String(msg.senderId).slice(-4)}`;
+              }
+              
+              // Profil fotoğrafı URL'sini tam URL'ye çevir
+              let profilePictureUrl = msg.profilePicture || null;
+              if (profilePictureUrl && profilePictureUrl.startsWith('/uploads/')) {
+                // API base URL'ini al ve profil fotoğrafı URL'sini tamamla
+                const apiBaseUrl = apiService.baseURL.replace('/api', '');
+                profilePictureUrl = `${apiBaseUrl}${profilePictureUrl}`;
+              }
+              
+              return {
+                id: `${msg.senderId}-${msg.timestamp}`,
+                user: userName,
+                message: msg.message,
+                time: new Date(msg.timestamp).toLocaleTimeString('tr-TR', { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                }),
+                avatar: '👤', // Fallback avatar
+                profilePicture: profilePictureUrl,
+                senderId: msg.senderId,
+                isOwn: isOwn,
+              };
+            });
+            
+            setMessages(formattedMessages.reverse());
+            console.log(`${formattedMessages.length} mesaj yüklendi`);
           }
         }
       } catch (error) {
-        console.error('📤 LocalChatScreen: Backend mesaj kaydetme hatası:', error);
+        console.error('Mesaj geçmişi yüklenirken hata:', error);
+      } finally {
+        setIsLoading(false);
       }
-      
-      // Socket.io ile mesaj gönder
-      console.log('📤 LocalChatScreen: Socket ile mesaj gönderiliyor...');
-      console.log('📤 LocalChatScreen: Socket connected:', isSocketConnected);
-      console.log('📤 LocalChatScreen: Socket service connected:', socketService.isSocketConnected());
-      const sentMessage = socketService.sendMessage(messageText, 'general');
-      console.log('📤 LocalChatScreen: Socket gönderim sonucu:', sentMessage);
-      
-      if (sentMessage) {
-        console.log('📤 LocalChatScreen: Mesaj başarıyla gönderildi');
-      } else {
-        console.log('📤 LocalChatScreen: Mesaj gönderilemedi');
-        Alert.alert('Hata', 'Mesaj gönderilemedi. Lütfen tekrar deneyin.');
-        // Hata durumunda mesajı geri al
-        setMessages(prev => prev.filter(msg => msg.id !== newMessage.id));
-      }
-      
-      setMessage('');
+    };
+    
+    loadMessageHistory();
+  }, [currentUser, isSocketConnected]);
+
+  const sendMessage = async () => {
+    if (!message.trim() || !isSocketConnected || !currentUser) {
+      console.log('📤 LocalChatScreen: Mesaj gönderilemiyor - boş mesaj, socket bağlantısı yok veya kullanıcı yok');
+      return;
     }
+
+    const messageText = message.trim();
+    console.log('📤 LocalChatScreen: Mesaj gönderiliyor:', messageText);
+    
+    // Kendi mesajınızı hemen ekleyin (optimistic update)
+    const newMessage = {
+      id: `own-${currentUser.id}-${Date.now()}`,
+      user: `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Sen',
+      message: messageText,
+      time: new Date().toLocaleTimeString('tr-TR', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      avatar: '👤',
+      senderId: currentUser.id,
+      isOwn: true,
+    };
+    
+    console.log('📤 LocalChatScreen: Optimistic update - mesaj eklendi:', newMessage);
+    setMessages(prev => [...prev, newMessage]);
+    
+    // Backend'e mesajı kaydet
+    try {
+      const token = await apiService.getStoredToken();
+      if (token) {
+        apiService.setToken(token);
+        await apiService.post('/chat/send', {
+          message: messageText,
+          room: 'general'
+        });
+        console.log('📤 LocalChatScreen: Mesaj backend\'e kaydedildi');
+      }
+    } catch (error) {
+      console.error('📤 LocalChatScreen: Backend mesaj kaydetme hatası:', error);
+    }
+    
+    // Socket.io ile mesaj gönder
+    const sentMessage = socketService.sendMessage(messageText, 'general');
+    console.log('📤 LocalChatScreen: Socket gönderim sonucu:', sentMessage);
+    
+    if (!sentMessage) {
+      console.log('📤 LocalChatScreen: Mesaj gönderilemedi');
+      Alert.alert('Hata', 'Mesaj gönderilemedi. Lütfen tekrar deneyin.');
+      // Hata durumunda mesajı geri al
+      setMessages(prev => prev.filter(msg => msg.id !== newMessage.id));
+    }
+    
+    setMessage('');
   };
 
   const renderMessage = ({ item }) => (
@@ -363,7 +288,22 @@ export default function LocalChatScreen({ navigation }) {
         {!item.isOwn && (
           <View style={styles.messageAvatar}>
             <View style={styles.avatarContainer}>
-              <Text style={styles.avatar}>{item.avatar}</Text>
+              {item.profilePicture ? (
+                <Image 
+                  source={{ uri: item.profilePicture }} 
+                  style={styles.avatarImage}
+                  defaultSource={require('../../assets/icon.png')}
+                  onError={(error) => {
+                    console.log('🌍 LocalChatScreen: Image load error:', error.nativeEvent.error);
+                    console.log('🌍 LocalChatScreen: Failed URL:', item.profilePicture);
+                  }}
+                  onLoad={() => {
+                    console.log('🌍 LocalChatScreen: Image loaded successfully:', item.profilePicture);
+                  }}
+                />
+              ) : (
+                <Text style={styles.avatar}>{item.avatar}</Text>
+              )}
             </View>
           </View>
         )}
@@ -431,6 +371,9 @@ export default function LocalChatScreen({ navigation }) {
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.headerTitle}>Local Chat</Text>
+              <Text style={styles.headerSubtitle}>
+                {isSocketConnected ? '🟢 Bağlı' : '🔴 Bağlantı Yok'}
+              </Text>
             </View>
             <View style={styles.headerSpacer} />
           </View>
@@ -554,8 +497,13 @@ const styles = StyleSheet.create({
     color: colors.text.light,
     marginBottom: 2,
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: colors.text.light,
+    opacity: 0.8,
+  },
   headerSpacer: {
-    width: 48, // Geri butonu ile aynı genişlikte boşluk
+    width: 48,
   },
   
   // Content Styles
@@ -603,6 +551,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   avatar: {
     fontSize: 18,

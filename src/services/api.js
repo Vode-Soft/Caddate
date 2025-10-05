@@ -6,16 +6,34 @@ import Constants from 'expo-constants';
 const getApiBaseUrl = () => {
   // Development için
   if (__DEV__) {
-    // Telefon/emülatör için gerçek IP adresini kullan
-    console.log('Development mode - using network IP API');
+    console.log('Development mode - detecting connection type...');
     
-    // Backend sunucusunun çalıştığı doğru IP adresini kullan
-    const serverIP = '192.168.1.9'; // Telefon için gerçek IP adresi
-    console.log(`Using server IP: ${serverIP}`);
-    return `http://${serverIP}:3000/api`;
+    // Expo tunnel URL kontrolü
+    const expoUrl = Constants.expoConfig?.hostUri || Constants.expoGoConfig?.hostUri;
+    console.log('Expo URL detected:', expoUrl);
+    
+    if (expoUrl && (expoUrl.includes('exp.direct') || expoUrl.includes('ngrok.io'))) {
+      // Tunnel modu - internet üzerinden erişilebilir bir URL kullan
+      console.log('Tunnel mode detected - using tunnel-compatible URL');
+      
+      // Tunnel modu için backend URL'inizi buraya yazın
+      // Ngrok URL'inizi buraya yazın (örn: https://abc123.ngrok.io)
+      const tunnelBackendUrl = process.env.EXPO_PUBLIC_TUNNEL_BACKEND_URL || 'https://your-ngrok-url.ngrok.io';
+      console.log(`Using tunnel backend URL: ${tunnelBackendUrl}`);
+      return `${tunnelBackendUrl}/api`;
+    } else {
+      // Yerel ağ modu - gerçek IP adresini kullan
+      console.log('Local network mode detected - using local IP');
+      const serverIP = '192.168.1.9'; // Telefon için gerçek IP adresi
+      console.log(`Using server IP: ${serverIP}`);
+      return `http://${serverIP}:3000/api`;
+    }
   }
-  // Production için
-  return 'https://your-production-api.com/api';
+  
+  // Production için - Environment değişkenlerinden al
+  const productionUrl = process.env.EXPO_PUBLIC_API_URL || 'https://your-production-api.com';
+  console.log('Production mode - using API URL:', productionUrl);
+  return `${productionUrl}/api`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -150,6 +168,9 @@ class ApiService {
   async testConnection() {
     try {
       console.log('🔍 API bağlantısı test ediliyor...');
+      console.log('🔍 Test URL:', `${this.baseURL.replace('/api', '')}/health`);
+      console.log('🔍 Base URL:', this.baseURL);
+      
       const response = await fetch(`${this.baseURL.replace('/api', '')}/health`, {
         method: 'GET',
         timeout: 5000
@@ -164,6 +185,7 @@ class ApiService {
       }
     } catch (error) {
       console.error('❌ API bağlantı testi başarısız:', error.message);
+      console.error('❌ Error details:', error);
       return false;
     }
   }
@@ -353,6 +375,10 @@ class ApiService {
     return this.get('/users/profile');
   }
 
+  async getUserProfile(userId) {
+    return this.get(`/users/profile/${userId}`);
+  }
+
   async updateProfile(userData) {
     return this.put('/users/profile', userData);
   }
@@ -416,6 +442,10 @@ class ApiService {
 
     try {
       console.log('🌐 API Service - Fetch isteği gönderiliyor...');
+      console.log('🌐 API Service - FormData detayları:', {
+        hasFormData: formData instanceof FormData,
+        formDataKeys: formData._parts ? formData._parts.map(part => part[0]) : 'No parts'
+      });
       const response = await fetch(url, config);
       
       console.log('🌐 API Service - Response status:', response.status);
@@ -469,7 +499,18 @@ class ApiService {
 
   // Arkadaş ekle
   async addFriend(friendId) {
-    return this.post('/friendships', { friendId });
+    console.log('🌐 API Service - addFriend çağrıldı:', friendId);
+    console.log('🌐 API Service - Base URL:', this.baseURL);
+    console.log('🌐 API Service - Token:', this.token ? 'Mevcut' : 'Yok');
+    
+    try {
+      const response = await this.post('/friendships', { friendId });
+      console.log('🌐 API Service - addFriend yanıtı:', response);
+      return response;
+    } catch (error) {
+      console.error('🌐 API Service - addFriend hatası:', error);
+      throw error;
+    }
   }
 
   // Arkadaş çıkar
@@ -682,6 +723,116 @@ class ApiService {
 
   async getPrivateConversations(limit = 20, offset = 0) {
     return this.get(`/chat/private/conversations?limit=${limit}&offset=${offset}`);
+  }
+
+  // Genel chat fonksiyonları
+  async sendMessage(message, room = 'general') {
+    return this.post('/chat/send', {
+      message: message,
+      room: room
+    });
+  }
+
+  async getMessageHistory(room = 'general', limit = 50, offset = 0) {
+    return this.get(`/chat/history?room=${room}&limit=${limit}&offset=${offset}`);
+  }
+
+  async markMessageAsRead(messageId) {
+    return this.patch(`/chat/${messageId}/read`);
+  }
+
+  async getUnreadMessageCount() {
+    return this.get('/chat/unread-count');
+  }
+
+  // Photo API fonksiyonları
+  async uploadPhoto(formData) {
+    const url = `${this.baseURL}/photos/upload`;
+    
+    const config = {
+      method: 'POST',
+      headers: {
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      },
+      body: formData,
+    };
+
+    try {
+      const response = await fetch(url, config);
+      
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = { message: await response.text() };
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      throw error;
+    }
+  }
+
+  async getPhotos(limit = 20, offset = 0) {
+    return this.get(`/photos/feed?limit=${limit}&offset=${offset}`);
+  }
+
+  async getMyPhotos(limit = 20, offset = 0) {
+    return this.get(`/photos/my?limit=${limit}&offset=${offset}`);
+  }
+
+  async likePhoto(photoId) {
+    return this.post(`/photos/${photoId}/like`);
+  }
+
+  async deletePhoto(photoId) {
+    return this.delete(`/photos/${photoId}`);
+  }
+
+  async updatePhoto(photoId, caption) {
+    return this.put(`/photos/${photoId}`, { caption });
+  }
+
+  // Vehicle API Methods
+  async getUserVehicles() {
+    return this.get('/vehicles');
+  }
+
+  async getPrimaryVehicle() {
+    return this.get('/vehicles/primary');
+  }
+
+  async addVehicle(vehicleData) {
+    return this.post('/vehicles', vehicleData);
+  }
+
+  async updateVehicle(vehicleId, vehicleData) {
+    return this.put(`/vehicles/${vehicleId}`, vehicleData);
+  }
+
+  async deleteVehicle(vehicleId) {
+    return this.delete(`/vehicles/${vehicleId}`);
+  }
+
+  async setPrimaryVehicle(vehicleId) {
+    return this.put(`/vehicles/${vehicleId}/primary`);
+  }
+
+  async uploadVehiclePhoto(vehicleId, formData) {
+    console.log('API: Uploading vehicle photo for ID:', vehicleId);
+    console.log('API: FormData:', formData);
+    return this.post(`/vehicles/${vehicleId}/photo`, formData);
+  }
+
+  // Arkadaşın araç bilgilerini getir
+  async getFriendVehicles(friendId) {
+    return this.get(`/friendships/${friendId}/vehicles`);
   }
 
 }

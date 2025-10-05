@@ -78,6 +78,56 @@ const getProfile = async (req, res) => {
   }
 };
 
+// Belirli bir kullanıcının profilini getir
+const getUserProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
+    
+    console.log(`getUserProfile: userId=${userId}, currentUserId=${currentUserId}`);
+    
+    // Kullanıcıyı bul
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kullanıcı bulunamadı'
+      });
+    }
+    
+    // Kendi profilini mi görüntülüyor kontrol et
+    if (parseInt(userId) === currentUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kendi profilinizi bu endpoint ile görüntüleyemezsiniz'
+      });
+    }
+    
+    // Profil fotoğrafı URL'ini tam URL olarak oluştur
+    if (user.profile_picture) {
+      const protocol = req.protocol;
+      const host = req.get('host');
+      user.profile_picture = `${protocol}://${host}${user.profile_picture}`;
+    }
+    
+    console.log(`getUserProfile: User found - ${user.first_name} ${user.last_name}`);
+    
+    res.json({
+      success: true,
+      data: user
+    });
+    
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 // Kullanıcı profili güncelle
 const updateProfile = async (req, res) => {
   try {
@@ -300,12 +350,25 @@ const updateSettings = async (req, res) => {
 // Profil fotoğrafı yükle
 const uploadProfilePicture = async (req, res) => {
   try {
+    console.log('📸 Upload Profile Picture - Request received');
+    console.log('📸 Upload Profile Picture - User ID:', req.user?.id);
+    console.log('📸 Upload Profile Picture - File:', req.file ? 'Present' : 'Missing');
+    console.log('📸 Upload Profile Picture - Headers:', req.headers);
+    
     if (!req.file) {
+      console.log('📸 Upload Profile Picture - No file received');
       return res.status(400).json({
         success: false,
         message: 'Dosya yüklenmedi'
       });
     }
+
+    console.log('📸 Upload Profile Picture - File details:', {
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
 
     const userId = req.user.id;
     const profilePicturePath = `/uploads/profiles/${req.file.filename}`;
@@ -315,8 +378,15 @@ const uploadProfilePicture = async (req, res) => {
     const host = req.get('host');
     const fullImageUrl = `${protocol}://${host}${profilePicturePath}`;
 
+    console.log('📸 Upload Profile Picture - Paths:', {
+      profilePicturePath,
+      fullImageUrl
+    });
+
     // Kullanıcının profil fotoğrafını güncelle
+    console.log('📸 Upload Profile Picture - Updating user profile...');
     const updatedUser = await User.update(userId, { profile_picture: profilePicturePath });
+    console.log('📸 Upload Profile Picture - User updated:', updatedUser ? 'Success' : 'Failed');
 
     res.json({
       success: true,
@@ -328,7 +398,8 @@ const uploadProfilePicture = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Upload profile picture error:', error);
+    console.error('📸 Upload Profile Picture - Error:', error);
+    console.error('📸 Upload Profile Picture - Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Sunucu hatası',
@@ -357,7 +428,8 @@ const searchUsers = async (req, res) => {
         id, 
         first_name, 
         last_name, 
-        email
+        email,
+        profile_picture
       FROM users
       WHERE id != $1 
         AND is_active = true
@@ -372,13 +444,17 @@ const searchUsers = async (req, res) => {
 
     console.log('Search result:', result.rows);
 
+    // Tam URL oluştur
+    const protocol = req.protocol;
+    const host = req.get('host');
+
     const users = result.rows.map(user => ({
       id: user.id,
       firstName: user.first_name,
       lastName: user.last_name,
       name: `${user.first_name} ${user.last_name}`,
       email: user.email,
-      profilePicture: null,
+      profilePicture: user.profile_picture ? `${protocol}://${host}${user.profile_picture}` : null,
       gender: null,
       age: null,
       bio: null,
@@ -433,19 +509,30 @@ const getFriends = async (req, res) => {
 
     const result = await pool.query(query, [req.user.id]);
 
-    const friends = result.rows.map(friend => ({
-      id: friend.id,
-      first_name: friend.first_name,
-      last_name: friend.last_name,
-      name: `${friend.first_name} ${friend.last_name}`,
-      email: friend.email,
-      profile_picture: friend.profile_picture,
-      mutual_friends: 0 // Bu özellik daha sonra eklenebilir
-    }));
+    // Tam URL oluştur
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const friends = result.rows.map(friend => {
+      const profilePictureUrl = friend.profile_picture ? `${protocol}://${host}${friend.profile_picture}` : null;
+      console.log(`👥 GetFriends - Friend: ${friend.first_name} ${friend.last_name} - Profile Picture URL:`, profilePictureUrl);
+      
+      return {
+        id: friend.id,
+        firstName: friend.first_name,
+        lastName: friend.last_name,
+        name: `${friend.first_name} ${friend.last_name}`,
+        email: friend.email,
+        profilePicture: profilePictureUrl,
+        mutual_friends: 0 // Bu özellik daha sonra eklenebilir
+      };
+    });
 
     res.json({
       success: true,
-      data: friends,
+      data: {
+        friends: friends
+      },
       message: `${friends.length} arkadaş bulundu`
     });
 
@@ -916,6 +1003,7 @@ const updateAdvancedProfile = async (req, res) => {
 
 module.exports = {
   getProfile,
+  getUserProfile,
   updateProfile,
   deleteAccount,
   discoverUsers,
