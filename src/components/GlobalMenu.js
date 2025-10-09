@@ -24,6 +24,14 @@ export default function GlobalMenu({ isVisible, onClose, onNavigate }) {
   const menuItems = [
     {
       id: '1',
+      title: 'MATCHES',
+      icon: 'heart',
+      color: '#FF3B87', // Pink color for matches
+      gradient: ['#FF3B87', '#FF6B9D'],
+      description: 'Eşleşmeler',
+    },
+    {
+      id: '2',
       title: 'İTİRAF',
       icon: 'chatbubbles',
       color: '#FF6B6B', // Red color for confession
@@ -31,28 +39,20 @@ export default function GlobalMenu({ isVisible, onClose, onNavigate }) {
       description: 'Anonim itiraflar',
     },
     {
-      id: '2',
-      title: 'LOCAL CHAT',
-      icon: 'chatbubble-ellipses',
-      color: '#10B981', // Green color for local chat
-      gradient: ['#10B981', '#34D399'],
-      description: 'Anlık mesajlaşma',
-    },
-    {
       id: '3',
       title: 'SUPPORT',
-      icon: 'heart',
-      color: '#8B5CF6', // Purple color like in the image
+      icon: 'help-circle',
+      color: '#8B5CF6', // Purple color
       gradient: ['#8B5CF6', '#A855F7'],
       description: 'Yardım ve destek',
     },
     {
       id: '4',
-      title: 'CREW',
-      icon: 'people',
-      color: '#374151', // Dark gray
-      gradient: ['#374151', '#4B5563'],
-      description: 'Takım üyeleri',
+      title: 'LOCAL CHAT',
+      icon: 'chatbubble-ellipses',
+      color: '#10B981', // Green color
+      gradient: ['#10B981', '#34D399'],
+      description: 'Anlık mesajlaşma',
     },
   ];
 
@@ -128,17 +128,17 @@ export default function GlobalMenu({ isVisible, onClose, onNavigate }) {
     // İlgili sayfaya yönlendir
     if (onNavigate) {
       switch (item.id) {
-        case '1': // İtiraf
+        case '1': // Matches
+          onNavigate('Matches');
+          break;
+        case '2': // İtiraf
           onNavigate('Confession');
           break;
-        case '2': // Local Chat
-          onNavigate('LocalChat');
-          break;
         case '3': // Support
-          onNavigate('NotificationCenter'); // Bildirim merkezine yönlendir
+          onNavigate('HelpSupport');
           break;
-        case '4': // Crew
-          onNavigate('Profile'); // Şimdilik Profile'a yönlendir
+        case '4': // Local Chat
+          onNavigate('LocalChat');
           break;
         default:
           break;

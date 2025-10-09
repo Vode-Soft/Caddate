@@ -26,6 +26,10 @@ const notificationRoutes = require('./routes/notifications');
 const socialRoutes = require('./routes/social');
 const chatRoutes = require('./routes/chat');
 const vehicleRoutes = require('./routes/vehicles');
+const subscriptionRoutes = require('./routes/subscriptions');
+const adminRoutes = require('./routes/admin');
+const matchRoutes = require('./routes/matches');
+const supportRoutes = require('./routes/support');
 
 // Import models
 const Activity = require('./models/Activity');
@@ -54,6 +58,10 @@ const getCorsOrigins = () => {
     ].filter(Boolean);
   } else {
     return [
+      // Admin Panel
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
+      // Mobile App
       "http://localhost:19006", 
       "http://localhost:19000",
       "http://127.0.0.1:19006",
@@ -671,6 +679,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/matches', matchRoutes);
+app.use('/api/support', supportRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

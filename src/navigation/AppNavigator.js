@@ -27,12 +27,14 @@ import NotificationCenterScreen from '../screens/NotificationCenterScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import AboutScreen from '../screens/AboutScreen';
+import MatchesScreen from '../screens/MatchesScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Ana Tab Navigator - Alt navigasyon menüsü
-function MainTabNavigator({ onLogout, navigation }) {
+function MainTabNavigator({ onLogout }) {
+  const navigation = useNavigation(); // Hook kullanarak navigation al
   const { height: screenHeight } = Dimensions.get('window');
   const bottomSafeArea = getBottomSafeArea();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -42,14 +44,16 @@ function MainTabNavigator({ onLogout, navigation }) {
     // GlobalMenu'den gelen navigation isteğini işle
     console.log('Navigating to:', screenName);
     
-    if (screenName === 'Confession') {
-      // Confession screen için Stack Navigator'a navigate et
-      const stackNavigation = navigation.getParent();
-      if (stackNavigation) {
-        stackNavigation.navigate(screenName);
-      }
+    // Stack Navigator'daki ekranlar
+    const stackScreens = ['Matches', 'Confession', 'LocalChat', 'HelpSupport', 'Settings', 'Security', 'NotificationCenter', 'Subscription', 'About'];
+    
+    if (stackScreens.includes(screenName)) {
+      // Stack Navigator'a navigate et
+      console.log('Navigating to stack screen:', screenName);
+      navigation.navigate(screenName);
     } else {
       // Tab Navigator içindeki ekranlara doğrudan navigasyon yap
+      console.log('Navigating to tab screen:', screenName);
       if (tabNavigatorRef.current) {
         tabNavigatorRef.current.navigate(screenName);
       }
@@ -253,7 +257,7 @@ export default function AppNavigator() {
       {isAuthenticated ? (
         <>
           <Stack.Screen name="Main">
-            {(props) => <MainTabNavigator {...props} navigation={props.navigation} onLogout={() => setIsAuthenticated(false)} />}
+            {(props) => <MainTabNavigator {...props} onLogout={() => setIsAuthenticated(false)} />}
           </Stack.Screen>
           <Stack.Screen name="Confession">
             {(props) => <ConfessionScreen {...props} />}
@@ -281,6 +285,9 @@ export default function AppNavigator() {
           </Stack.Screen>
           <Stack.Screen name="About">
             {(props) => <AboutScreen {...props} />}
+          </Stack.Screen>
+          <Stack.Screen name="Matches">
+            {(props) => <MatchesScreen {...props} />}
           </Stack.Screen>
         </>
       ) : (

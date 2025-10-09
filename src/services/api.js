@@ -24,7 +24,7 @@ const getApiBaseUrl = () => {
     } else {
       // Yerel ağ modu - gerçek IP adresini kullan
       console.log('Local network mode detected - using local IP');
-      const serverIP = '192.168.1.9'; // Telefon için gerçek IP adresi
+      const serverIP = '192.168.1.17'; // Telefon için gerçek IP adresi
       console.log(`Using server IP: ${serverIP}`);
       return `http://${serverIP}:3000/api`;
     }
@@ -329,18 +329,38 @@ class ApiService {
   }
 
   async login(email, password) {
+    console.log('🔐 Login başlatılıyor...', { email, passwordLength: password?.length });
+    
     // Login öncesi eski token'ı temizle
     await this.removeStoredToken();
     this.clearToken();
     
-    const response = await this.post('/auth/login', { email, password });
+    console.log('🌐 API isteği gönderiliyor:', `${this.baseURL}/auth/login`);
     
-    // Başarılı girişte token'ı kaydet
-    if (response.success && response.data.token) {
-      await this.saveToken(response.data.token);
+    try {
+      const response = await this.post('/auth/login', { email, password });
+      
+      console.log('✅ Login response alındı:', {
+        success: response.success,
+        hasData: !!response.data,
+        hasToken: !!response.data?.token,
+        message: response.message
+      });
+      
+      // Başarılı girişte token'ı kaydet
+      if (response.success && response.data && response.data.token) {
+        console.log('💾 Token kaydediliyor...');
+        await this.saveToken(response.data.token);
+        console.log('✅ Token kaydedildi');
+      } else {
+        console.log('❌ Token bulunamadı:', response);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      throw error;
     }
-    
-    return response;
   }
 
   async verifyToken() {
@@ -833,6 +853,47 @@ class ApiService {
   // Arkadaşın araç bilgilerini getir
   async getFriendVehicles(friendId) {
     return this.get(`/friendships/${friendId}/vehicles`);
+  }
+
+  // ==================== MATCHES API ====================
+  
+  // Kullanıcıyı beğen
+  async likeUser(userId) {
+    console.log('API: Liking user:', userId);
+    return this.post('/matches/like', { likedUserId: userId });
+  }
+
+  // Beğeniyi geri al
+  async unlikeUser(userId) {
+    console.log('API: Unliking user:', userId);
+    return this.delete(`/matches/unlike/${userId}`);
+  }
+
+  // Eşleşme listesini getir
+  async getMatches(params = {}) {
+    const { limit = 20, offset = 0, mutualOnly = true } = params;
+    console.log('API: Getting matches:', { limit, offset, mutualOnly });
+    return this.get(`/matches?limit=${limit}&offset=${offset}&mutualOnly=${mutualOnly}`);
+  }
+
+  // Seni beğenenleri getir
+  async getLikesReceived(params = {}) {
+    const { limit = 20, offset = 0 } = params;
+    console.log('API: Getting likes received:', { limit, offset });
+    return this.get(`/matches/likes-received?limit=${limit}&offset=${offset}`);
+  }
+
+  // Eşleşme önerileri getir
+  async getSuggestedMatches(params = {}) {
+    const { limit = 20, offset = 0, maxDistance = 100, minAge = 18, maxAge = 99, gender = 'all' } = params;
+    console.log('API: Getting suggested matches:', { limit, offset, maxDistance, minAge, maxAge, gender });
+    return this.get(`/matches/suggestions?limit=${limit}&offset=${offset}&maxDistance=${maxDistance}&minAge=${minAge}&maxAge=${maxAge}&gender=${gender}`);
+  }
+
+  // Eşleşme istatistikleri
+  async getMatchStats() {
+    console.log('API: Getting match stats');
+    return this.get('/matches/stats');
   }
 
 }

@@ -154,8 +154,12 @@ export default function HelpSupportScreen({ navigation }) {
     setIsSubmitting(true);
     
     try {
-      // Simüle edilmiş destek talebi gönderme
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const api = require('../services/api').default;
+      
+      await api.post('/support/tickets', {
+        category: selectedCategory,
+        message: message.trim()
+      });
       
       Alert.alert(
         'Başarılı!', 
@@ -171,7 +175,8 @@ export default function HelpSupportScreen({ navigation }) {
         ]
       );
     } catch (error) {
-      Alert.alert('Hata', 'Destek talebi gönderilirken bir hata oluştu.');
+      console.error('Destek talebi hatası:', error);
+      Alert.alert('Hata', 'Destek talebi gönderilirken bir hata oluştu. Lütfen tekrar deneyin.');
     } finally {
       setIsSubmitting(false);
     }
@@ -282,6 +287,7 @@ export default function HelpSupportScreen({ navigation }) {
             <TextInput
               style={styles.messageInput}
               placeholder="Sorununuzu detaylı bir şekilde açıklayın..."
+              placeholderTextColor={colors.text.tertiary}
               value={message}
               onChangeText={setMessage}
               multiline
@@ -341,14 +347,11 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(15),
   },
   categoryCard: {
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: scale(12),
     marginBottom: verticalScale(10),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -387,15 +390,12 @@ const styles = StyleSheet.create({
   contactCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     padding: getResponsivePadding(),
     borderRadius: scale(12),
     marginBottom: verticalScale(10),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   contactIcon: {
     width: scale(48),
@@ -419,15 +419,12 @@ const styles = StyleSheet.create({
     marginTop: verticalScale(2),
   },
   supportForm: {
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: scale(12),
     padding: getResponsivePadding(),
     marginBottom: verticalScale(20),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   inputLabel: {
     fontSize: scaleFont(14),
@@ -442,15 +439,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(16),
     paddingVertical: verticalScale(8),
     borderRadius: scale(20),
-    backgroundColor: colors.background,
+    backgroundColor: colors.darkGray,
+    borderWidth: 1,
+    borderColor: colors.border.light,
     marginRight: scale(8),
   },
   selectedCategoryChip: {
     backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryChipText: {
     fontSize: scaleFont(12),
-    color: colors.text.secondary,
+    color: colors.text.primary,
   },
   selectedCategoryChipText: {
     color: 'white',
@@ -460,11 +460,12 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.border.light,
     borderRadius: scale(8),
     padding: getResponsivePadding(),
     fontSize: scaleFont(14),
     color: colors.text.primary,
+    backgroundColor: colors.darkGray,
     minHeight: verticalScale(100),
   },
   submitButton: {
@@ -474,7 +475,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonDisabled: {
-    backgroundColor: colors.text.secondary,
+    backgroundColor: colors.lightGray,
+    opacity: 0.6,
   },
   submitButtonText: {
     color: 'white',

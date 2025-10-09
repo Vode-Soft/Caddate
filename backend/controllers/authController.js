@@ -217,8 +217,19 @@ const login = async (req, res) => {
       success: true,
       message: 'Giriş başarılı',
       data: {
-        user,
-        token
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role || 'user',
+          admin_level: user.admin_level || 0,
+          is_premium: user.is_premium || false,
+          is_active: user.is_active
+        }
       }
     });
 

@@ -224,6 +224,7 @@ export default function PrivateChatScreen({ navigation, route }) {
                 const response = await apiService.delete(`/chat/private/clear?friendId=${friend.id}`);
                 if (response.success) {
                   console.log('🗑️ PrivateChatScreen: Backend\'den mesajlar silindi');
+                  Alert.alert('Başarılı', 'Sohbet temizlendi');
                 } else {
                   console.log('🗑️ PrivateChatScreen: Backend silme hatası:', response.message);
                 }
@@ -233,8 +234,12 @@ export default function PrivateChatScreen({ navigation, route }) {
               setMessages([]);
               setShowChatMenu(false);
               console.log('🗑️ PrivateChatScreen: Sohbet temizlendi');
+              
+              // ChatScreen'e geri dön ve listeyi yenile
+              navigation.navigate('Chat', { refreshConversations: true });
             } catch (error) {
               console.error('🗑️ PrivateChatScreen: Sohbet temizleme hatası:', error);
+              Alert.alert('Hata', 'Sohbet temizlenirken bir hata oluştu');
               // Hata olsa bile frontend'den temizle
               setMessages([]);
               setShowChatMenu(false);

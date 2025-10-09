@@ -53,7 +53,7 @@ import {
 import socketService from '../services/socketService';
 import apiService from '../services/api';
 
-export default function ChatScreen({ navigation }) {
+export default function ChatScreen({ navigation, route }) {
   const [activeTab, setActiveTab] = useState('private');
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -628,10 +628,21 @@ export default function ChatScreen({ navigation }) {
       console.log('Screen focused - arkadaş listesi yeniden yükleniyor...');
       loadFriends();
       loadFriendRequests();
+      loadPrivateChats(); // Özel sohbet listesini de yenile
     });
 
     return unsubscribe;
   }, [navigation]);
+
+  // Route parametrelerini dinle - sohbet temizleme sonrası yenileme
+  useEffect(() => {
+    if (route?.params?.refreshConversations) {
+      console.log('🔄 ChatScreen: Konuşma listesi yenileniyor (sohbet temizleme sonrası)');
+      loadPrivateChats();
+      // Parametreyi temizle
+      navigation.setParams({ refreshConversations: false });
+    }
+  }, [route?.params?.refreshConversations]);
 
   // Arkadaş listesi değiştiğinde log
   useEffect(() => {

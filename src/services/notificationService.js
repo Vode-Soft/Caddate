@@ -28,6 +28,7 @@ class NotificationService {
       let finalStatus = existingStatus;
       
       if (existingStatus !== 'granted') {
+        console.log('🔔 NotificationService: İzin isteniyor...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
@@ -37,21 +38,62 @@ class NotificationService {
         return false;
       }
       
-      // Expo push token'ı al
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-      if (!projectId) {
-        console.log('🔔 NotificationService: Project ID bulunamadı');
-        return false;
+      console.log('🔔 NotificationService: Bildirim izni alındı');
+      
+      // Expo push token'ı al (sadece production build'de)
+      // Development modunda push notification token'a gerek yok
+      if (__DEV__) {
+        console.log('🔔 NotificationService: Development modu - Push token atlanıyor');
+        this.isInitialized = true;
+        return true;
       }
       
-      this.expoPushToken = await Notifications.getExpoPushTokenAsync({
-        projectId: projectId,
-      });
+      // Production build için Expo Push Token alma
+      let projectId;
+      try {
+        projectId = Constants.expoConfig?.extra?.eas?.projectId || 
+                    Constants.manifest?.extra?.eas?.projectId ||
+                    Constants.manifest2?.extra?.expoClient?.extra?.eas?.projectId;
+        
+        // Sahte/test UUID'leri filtrele
+        const testUUIDs = [
+          '12345678-1234-1234-1234-123456789abc',
+          '00000000-0000-0000-0000-000000000000',
+          'your-project-id'
+        ];
+        
+        if (!projectId || testUUIDs.includes(projectId)) {
+          console.warn('🔔 NotificationService: Geçerli Project ID bulunamadı');
+          projectId = undefined;
+        } else {
+          console.log('🔔 NotificationService: Project ID bulundu:', projectId);
+        }
+      } catch (error) {
+        console.warn('🔔 NotificationService: Project ID alma hatası:', error.message);
+        projectId = undefined;
+      }
       
-      console.log('🔔 NotificationService: Expo Push Token:', this.expoPushToken.data);
+      // Expo Push Token alma (sadece geçerli projectId varsa)
+      if (!projectId) {
+        console.warn('🔔 NotificationService: Project ID yok, push notification kullanılamayacak');
+        console.warn('🔔 NotificationService: Gerçek bir EAS projesi oluşturup projectId\'yi app.config.js\'e eklemeniz gerekiyor');
+        this.isInitialized = true;
+        return true;
+      }
       
-      // Token'ı backend'e gönder
-      await this.sendTokenToBackend(this.expoPushToken.data);
+      try {
+        this.expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
+        console.log('🔔 NotificationService: Expo Push Token alındı:', this.expoPushToken.data);
+        
+        // Token'ı backend'e gönder
+        if (this.expoPushToken?.data) {
+          await this.sendTokenToBackend(this.expoPushToken.data);
+        }
+      } catch (tokenError) {
+        console.error('🔔 NotificationService: Push token alma hatası:', tokenError);
+        // Token alınamazsa bile servis çalışmaya devam etsin
+        console.warn('🔔 NotificationService: Push notification devre dışı, yerel bildirimler çalışacak');
+      }
       
       this.isInitialized = true;
       console.log('🔔 NotificationService: Başarıyla başlatıldı');
@@ -59,29 +101,52 @@ class NotificationService {
       
     } catch (error) {
       console.error('🔔 NotificationService: Başlatma hatası:', error);
+      // Development modunda hataları göz ardı et
+      if (__DEV__) {
+        console.warn('🔔 NotificationService: Development modunda hata göz ardı edildi');
+        this.isInitialized = true;
+        return true;
+      }
       return false;
     }
   }
 
   // Push token'ı backend'e gönder
   async sendTokenToBackend(token) {
+    if (!token) {
+      console.log('🔔 NotificationService: Token boş, backend\'e gönderilmedi');
+      return;
+    }
+
     try {
+      console.log('🔔 NotificationService: Token backend\'e gönderiliyor...');
+      
+      // API token'ını kontrol et
       const userToken = await apiService.getStoredToken();
-      if (userToken) {
-        apiService.setToken(userToken);
-        const response = await apiService.post('/notifications/register-token', {
-          pushToken: token,
-          platform: Platform.OS
-        });
-        
-        if (response.success) {
-          console.log('🔔 NotificationService: Token backend\'e gönderildi');
-        } else {
-          console.log('🔔 NotificationService: Token gönderilemedi:', response.message);
-        }
+      
+      if (!userToken) {
+        console.log('🔔 NotificationService: Kullanıcı token\'ı yok, backend\'e gönderilemedi (kullanıcı giriş yapmamış olabilir)');
+        return;
+      }
+      
+      // API token'ını set et
+      apiService.setToken(userToken);
+      
+      // Backend'e gönder
+      const response = await apiService.post('/notifications/register-token', {
+        pushToken: token,
+        platform: Platform.OS
+      });
+      
+      if (response?.success) {
+        console.log('🔔 NotificationService: Token başarıyla backend\'e gönderildi');
+      } else {
+        console.warn('🔔 NotificationService: Token gönderilemedi:', response?.message || 'Bilinmeyen hata');
       }
     } catch (error) {
-      console.error('🔔 NotificationService: Token gönderme hatası:', error);
+      console.error('🔔 NotificationService: Token gönderme hatası:', error.message);
+      // Backend hatası olsa bile servis çalışmaya devam etsin
+      console.warn('🔔 NotificationService: Backend hatası göz ardı edildi, servis çalışmaya devam ediyor');
     }
   }
 
