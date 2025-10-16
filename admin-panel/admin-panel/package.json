@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "caddate-admin-panel": "file:.."
+  }
+}
