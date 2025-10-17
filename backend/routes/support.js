@@ -1,18 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const supportController = require('../controllers/supportController');
-const auth = require('../middleware/auth');
-const adminAuth = require('../middleware/adminAuth');
+const { authenticateToken } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/adminAuth');
+
+// Tüm route'lar authentication gerektirir
+router.use(authenticateToken);
 
 // Kullanıcı routes
-router.post('/tickets', auth, supportController.createSupportTicket);
-router.get('/tickets/my', auth, supportController.getUserTickets);
+router.post('/tickets', supportController.createSupportTicket);
+router.get('/tickets/my', supportController.getUserTickets);
 
-// Admin routes
-router.get('/tickets', auth, adminAuth, supportController.getAllTickets);
-router.get('/tickets/stats', auth, adminAuth, supportController.getTicketStats);
-router.put('/tickets/:id', auth, adminAuth, supportController.updateTicket);
-router.delete('/tickets/:id', auth, adminAuth, supportController.deleteTicket);
+// Admin routes (ek olarak admin yetkisi gerektirir)
+router.get('/tickets', requireAdmin, supportController.getAllTickets);
+router.get('/tickets/stats', requireAdmin, supportController.getTicketStats);
+router.put('/tickets/:id', requireAdmin, supportController.updateTicket);
+router.delete('/tickets/:id', requireAdmin, supportController.deleteTicket);
 
 module.exports = router;
-
