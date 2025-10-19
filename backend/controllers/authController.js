@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const EmailVerification = require('../models/EmailVerification');
+const emailService = require('../services/emailService');
 
 // JWT token oluşturma
 const generateToken = (userId, email) => {
@@ -304,8 +305,187 @@ const verifyToken = async (req, res) => {
   }
 };
 
+// Şifre sıfırlama kodu gönder
+const sendPasswordResetCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email adresi gerekli'
+      });
+    }
+
+    // Email formatını kontrol et
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Geçerli bir email adresi giriniz'
+      });
+    }
+
+    // Kullanıcıyı bul
+    const user = await User.findByEmail(email);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bu email adresi ile kayıtlı kullanıcı bulunamadı'
+      });
+    }
+
+    // Kullanıcının mevcut şifre sıfırlama kodlarını temizle
+    await EmailVerification.clearUserCodes(user.id, 'password_reset');
+
+    // Yeni doğrulama kodu oluştur
+    const verification_code = EmailVerification.generateVerificationCode();
+    const expires_at = EmailVerification.getExpirationTime();
+
+    // Kodu veritabanına kaydet
+    const verificationData = {
+      user_id: user.id,
+      email,
+      verification_code,
+      code_type: 'password_reset',
+      expires_at
+    };
+
+    await EmailVerification.create(verificationData);
+
+    // Email gönder
+    try {
+      await emailService.sendPasswordResetCode(email, verification_code, user.first_name);
+      console.log(`Password reset code sent to ${email}: ${verification_code}`);
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // Email gönderilemese bile kodu veritabanına kaydettik, kullanıcıya bilgi ver
+    }
+
+    res.json({
+      success: true,
+      message: 'Şifre sıfırlama kodu email adresinize gönderildi'
+    });
+
+  } catch (error) {
+    console.error('Send password reset code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Şifre sıfırlama kodunu doğrula
+const verifyPasswordResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email ve kod gerekli'
+      });
+    }
+
+    // Kodu doğrula
+    const verification = await EmailVerification.verifyCode(email, code, 'password_reset');
+    
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        message: 'Geçersiz veya süresi dolmuş kod'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Kod doğrulandı',
+      data: {
+        verification_id: verification.id
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify password reset code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Yeni şifre belirle
+const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, kod ve yeni şifre gerekli'
+      });
+    }
+
+    // Şifre uzunluğunu kontrol et
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Yeni şifre en az 6 karakter olmalıdır'
+      });
+    }
+
+    // Kodu doğrula
+    const verification = await EmailVerification.verifyCode(email, code, 'password_reset');
+    
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        message: 'Geçersiz veya süresi dolmuş kod'
+      });
+    }
+
+    // Kullanıcıyı bul
+    const user = await User.findByEmail(email);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kullanıcı bulunamadı'
+      });
+    }
+
+    // Yeni şifreyi hashle
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Şifreyi güncelle
+    await User.updatePassword(user.id, hashedPassword);
+
+    // Kullanılan doğrulama kodunu sil
+    await EmailVerification.deleteById(verification.id);
+
+    res.json({
+      success: true,
+      message: 'Şifre başarıyla sıfırlandı'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
-  verifyToken
+  verifyToken,
+  sendPasswordResetCode,
+  verifyPasswordResetCode,
+  resetPassword
 };

@@ -51,7 +51,23 @@ class SocketService {
       console.log('SocketService: Socket URL:', socketURL);
       
       // Production için WebSocket URL'ini ayarla
-      const finalSocketURL = __DEV__ ? socketURL : socketURL.replace('http://', 'wss://').replace('https://', 'wss://');
+      let finalSocketURL = socketURL;
+      
+      // Render URL'i için özel işlem
+      if (socketURL.includes('onrender.com')) {
+        // Render için WebSocket URL'ini düzelt
+        finalSocketURL = socketURL.replace('https://', 'wss://');
+        console.log('SocketService: Render WebSocket URL:', finalSocketURL);
+      } else if (__DEV__) {
+        // Development için HTTP kullan
+        finalSocketURL = socketURL;
+        console.log('SocketService: Development URL:', finalSocketURL);
+      } else {
+        // Production için WebSocket
+        finalSocketURL = socketURL.replace('http://', 'wss://').replace('https://', 'wss://');
+        console.log('SocketService: Production WebSocket URL:', finalSocketURL);
+      }
+      
       console.log('SocketService: Final Socket URL:', finalSocketURL);
       
       // Tunnel URL kontrolü
@@ -61,22 +77,35 @@ class SocketService {
         console.log('SocketService: Using local connection');
       }
 
-      this.socket = io(finalSocketURL, {
+      // Render için özel konfigürasyon
+      const socketConfig = {
         auth: {
           token: token
         },
-        transports: ['websocket', 'polling'], // Her zaman her iki transport'u da dene
-        timeout: 5000, // Çok kısa timeout
+        timeout: 10000, // Render için daha uzun timeout
         forceNew: true,
         autoConnect: true,
         reconnection: true,
-        reconnectionDelay: 500, // Çok hızlı yeniden bağlanma
-        reconnectionAttempts: 50, // Çok fazla deneme
-        maxReconnectionAttempts: 50,
-        upgrade: true, // Transport upgrade'i etkinleştir
-        rememberUpgrade: true, // Upgrade'i hatırla
-        randomizationFactor: 0.1 // Daha az rastgelelik
-      });
+        reconnectionDelay: 1000, // Render için daha uzun delay
+        reconnectionAttempts: 10, // Render için daha az deneme
+        maxReconnectionAttempts: 10,
+        randomizationFactor: 0.5 // Daha fazla rastgelelik
+      };
+
+      // Render URL'i için özel transport ayarları
+      if (socketURL.includes('onrender.com')) {
+        socketConfig.transports = ['polling', 'websocket']; // Polling'i önce dene
+        socketConfig.upgrade = true;
+        socketConfig.rememberUpgrade = false; // Render için upgrade'i hatırlama
+        console.log('SocketService: Render için özel konfigürasyon kullanılıyor');
+      } else {
+        socketConfig.transports = ['websocket', 'polling']; // Normal sıralama
+        socketConfig.upgrade = true;
+        socketConfig.rememberUpgrade = true;
+        console.log('SocketService: Normal konfigürasyon kullanılıyor');
+      }
+
+      this.socket = io(finalSocketURL, socketConfig);
 
       console.log('SocketService: Socket instance oluşturuldu');
       console.log('SocketService: Token:', token ? 'Mevcut' : 'Yok');
@@ -96,6 +125,8 @@ class SocketService {
       console.log('🔌🔌🔌 SocketService: Socket bağlandı, ID:', this.socket.id);
       console.log('🔌 SocketService: Socket URL:', this.socket.io.uri);
       console.log('🔌 SocketService: Socket transport:', this.socket.io.engine.transport.name);
+      console.log('🔌 SocketService: Socket engine:', this.socket.io.engine);
+      console.log('🔌 SocketService: Socket ready state:', this.socket.io.readyState);
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this.emitLocal('connection_status', { connected: true });
@@ -120,12 +151,21 @@ class SocketService {
     // Bağlantı hatası
     this.socket.on('connect_error', (error) => {
       console.error('SocketService: Socket bağlantı hatası:', error);
+      console.error('SocketService: Error type:', error.type);
+      console.error('SocketService: Error description:', error.description);
+      console.error('SocketService: Error context:', error.context);
+      console.error('SocketService: Socket URL:', this.socket?.io?.uri);
       this.isConnected = false;
       this.emitLocal('connection_error', error);
       
       // WebSocket hatası için özel mesaj
       if (error.message && error.message.includes('websocket error')) {
         console.log('SocketService: WebSocket hatası, polling ile yeniden denenecek...');
+      }
+      
+      // Render için özel hata mesajları
+      if (error.message && error.message.includes('timeout')) {
+        console.log('SocketService: Timeout hatası - Render sunucusu yanıt vermiyor');
       }
       
       this.handleReconnect();
@@ -561,6 +601,40 @@ class SocketService {
   // Bağlantı durumunu kontrol et
   isSocketConnected() {
     return this.socket && this.isConnected;
+  }
+
+  // Debug bilgilerini al
+  getDebugInfo() {
+    return {
+      socketExists: !!this.socket,
+      isConnected: this.isConnected,
+      socketId: this.socket?.id,
+      socketUrl: this.socket?.io?.uri,
+      transport: this.socket?.io?.engine?.transport?.name,
+      readyState: this.socket?.io?.readyState,
+      reconnectAttempts: this.reconnectAttempts,
+      maxReconnectAttempts: this.maxReconnectAttempts
+    };
+  }
+
+  // Socket bağlantısını test et
+  async testConnection() {
+    try {
+      console.log('SocketService: Bağlantı testi başlatılıyor...');
+      const debugInfo = this.getDebugInfo();
+      console.log('SocketService: Debug bilgileri:', debugInfo);
+      
+      if (!this.socket) {
+        console.log('SocketService: Socket instance yok, yeniden bağlanma deneniyor...');
+        await this.connect();
+        return this.getDebugInfo();
+      }
+      
+      return debugInfo;
+    } catch (error) {
+      console.error('SocketService: Bağlantı testi hatası:', error);
+      return { error: error.message };
+    }
   }
 
   // Socket'i kapat

@@ -187,7 +187,10 @@ export default function LoginScreen({ navigation, onAuthentication }) {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.forgotPassword}>
+              <TouchableOpacity 
+                style={styles.forgotPassword}
+                onPress={() => navigation.navigate('ForgotPassword')}
+              >
                 <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>
               </TouchableOpacity>
             </View>

@@ -243,6 +243,23 @@ class User {
       throw error;
     }
   }
+
+  // Şifre güncelleme
+  static async updatePassword(userId, hashedPassword) {
+    const query = `
+      UPDATE users 
+      SET password = $1, last_password_change = NOW(), updated_at = NOW()
+      WHERE id = $2
+    `;
+    
+    try {
+      const result = await executeQuery(query, [hashedPassword, userId]);
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('❌ User.updatePassword - Database error:', error.message);
+      throw error;
+    }
+  }
 }
 
 module.exports = User;

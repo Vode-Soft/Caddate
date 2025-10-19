@@ -108,12 +108,16 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
     credentials: true
   },
-  // Production optimizasyonları
-  pingTimeout: process.env.NODE_ENV === 'production' ? 60000 : 30000,
-  pingInterval: process.env.NODE_ENV === 'production' ? 25000 : 15000,
+  // Render için optimize edilmiş ayarlar
+  pingTimeout: process.env.NODE_ENV === 'production' ? 120000 : 30000, // Render için daha uzun timeout
+  pingInterval: process.env.NODE_ENV === 'production' ? 50000 : 15000, // Render için daha uzun interval
   maxHttpBufferSize: process.env.NODE_ENV === 'production' ? 1e6 : 1e5, // 1MB production, 100KB development
-  transports: ['websocket', 'polling'], // Her zaman her iki transport'u da kullan
-  allowEIO3: true // Eski client'lar için uyumluluk
+  transports: ['polling', 'websocket'], // Render için polling'i önce dene
+  allowEIO3: true, // Eski client'lar için uyumluluk
+  // Render için ek ayarlar
+  allowUpgrades: true,
+  perMessageDeflate: false, // Render için sıkıştırmayı kapat
+  httpCompression: false // HTTP sıkıştırmasını kapat
 });
 
 const PORT = process.env.PORT || 3000;
@@ -165,6 +169,31 @@ app.get('/health', async (req, res) => {
       error: error.message
     });
   }
+});
+
+// Socket.io debug endpoint
+app.get('/socket-debug', (req, res) => {
+  res.json({
+    socketIoEnabled: true,
+    connectedClients: io.engine.clientsCount,
+    transports: ['polling', 'websocket'],
+    cors: {
+      origin: "*",
+      methods: ['GET', 'POST'],
+      credentials: true
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Socket.io test endpoint - basit bağlantı testi
+app.get('/socket-test', (req, res) => {
+  res.json({
+    message: 'Socket.io test endpoint',
+    status: 'OK',
+    socketIoVersion: require('socket.io/package.json').version,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Socket.io middleware for authentication

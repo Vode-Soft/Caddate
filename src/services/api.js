@@ -566,6 +566,19 @@ class ApiService {
     return this.post('/security/verify-email-code', { code });
   }
 
+  // Şifre sıfırlama fonksiyonları
+  async sendPasswordResetCode(email) {
+    return this.post('/auth/send-password-reset-code', { email });
+  }
+
+  async verifyPasswordResetCode(email, code) {
+    return this.post('/auth/verify-password-reset-code', { email, code });
+  }
+
+  async resetPassword(email, code, newPassword) {
+    return this.post('/auth/reset-password', { email, code, newPassword });
+  }
+
   async toggle2FA(enabled) {
     return this.post('/security/toggle-2fa', { enabled });
   }

@@ -14,6 +14,7 @@ import apiService from '../services/api';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import MapScreen from '../screens/MapScreen';
 import ChatScreen from '../screens/ChatScreen';
 import LocalChatScreen from '../screens/LocalChatScreen';
@@ -297,6 +298,9 @@ export default function AppNavigator() {
           </Stack.Screen>
           <Stack.Screen name="Register">
             {(props) => <RegisterScreen {...props} onAuthentication={handleAuthentication} />}
+          </Stack.Screen>
+          <Stack.Screen name="ForgotPassword">
+            {(props) => <ForgotPasswordScreen {...props} />}
           </Stack.Screen>
           <Stack.Screen name="EmailVerification">
             {(props) => <EmailVerificationScreen {...props} />}
