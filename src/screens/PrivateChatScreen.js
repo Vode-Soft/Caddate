@@ -381,6 +381,12 @@ export default function PrivateChatScreen({ navigation, route }) {
   const handleConnectionStatus = useCallback((data) => {
     console.log('Socket bağlantı durumu:', data);
     setIsSocketConnected(data.connected);
+    
+    // Debug bilgilerini logla
+    if (data.connected) {
+      const debugInfo = socketService.getDebugInfo();
+      console.log('🔍 PrivateChatScreen: Socket debug bilgileri:', debugInfo);
+    }
   }, []);
 
   // Socket.io bağlantısını yönet
@@ -389,15 +395,21 @@ export default function PrivateChatScreen({ navigation, route }) {
     
     // Socket bağlantısını başlat (sadece bir kez)
     if (!socketService.isSocketConnected()) {
+      console.log('🔌 PrivateChatScreen: Socket bağlantısı yok, başlatılıyor...');
       socketService.connect();
+    } else {
+      console.log('🔌 PrivateChatScreen: Socket bağlantısı mevcut');
+      setIsSocketConnected(true);
     }
 
     // Socket bağlantısını kontrol et
     const checkConnection = () => {
       const connected = socketService.isSocketConnected();
+      console.log('🔌 PrivateChatScreen: Socket bağlantı durumu:', connected);
+      setIsSocketConnected(connected);
+      
       if (connected) {
         console.log('🔌 PrivateChatScreen: Socket bağlantısı kuruldu');
-        setIsSocketConnected(true);
         // Özel odaya katıl
         if (currentUser && friend?.id) {
           const roomName = `private_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
@@ -406,13 +418,17 @@ export default function PrivateChatScreen({ navigation, route }) {
           console.log('🔌 PrivateChatScreen: Özel odaya katılma sonucu:', joinResult);
         }
       } else {
-        console.log('🔌 PrivateChatScreen: Socket bağlantısı yok');
-        setIsSocketConnected(false);
+        console.log('🔌 PrivateChatScreen: Socket bağlantısı yok, tekrar deneniyor...');
+        // Socket bağlantısını tekrar başlat
+        socketService.connect();
       }
     };
 
     // İlk kontrol
     checkConnection();
+
+    // Periyodik kontrol - daha sık kontrol et
+    const connectionInterval = setInterval(checkConnection, 1000);
 
     // Event listener'ları kaydet
     console.log('🔌 PrivateChatScreen: Event listener\'lar kaydediliyor...');
@@ -425,10 +441,12 @@ export default function PrivateChatScreen({ navigation, route }) {
 
     // Cleanup function
     return () => {
+      clearInterval(connectionInterval);
       console.log('🔌 PrivateChatScreen: Event listener\'lar temizleniyor...');
       socketService.off('private_message_received', handlePrivateMessageReceived);
       socketService.off('connection_error', handleConnectionError);
       socketService.off('connection_status', handleConnectionStatus);
+      console.log('🔌 PrivateChatScreen: Event listener\'lar temizlendi, socket bağlantısı açık bırakılıyor');
     };
   }, [currentUser, friend?.id, handlePrivateMessageReceived, handleConnectionError, handleConnectionStatus]);
 
@@ -443,10 +461,12 @@ export default function PrivateChatScreen({ navigation, route }) {
     }
   }, [currentUser, isSocketConnected, loadPrivateMessageHistory]);
 
-  // Component unmount olduğunda socket bağlantısını kapat
+  // Component unmount olduğunda socket bağlantısını kapatma
+  // Socket bağlantısı global olarak yönetiliyor
   useEffect(() => {
     return () => {
-      socketService.disconnect();
+      console.log('🔌 PrivateChatScreen: Component unmount, socket bağlantısı açık bırakılıyor');
+      // socketService.disconnect(); // Bu satırı kaldırdık
     };
   }, []);
 
@@ -570,22 +590,11 @@ export default function PrivateChatScreen({ navigation, route }) {
         {!item.isOwn && (
           <View style={styles.messageAvatar}>
             <View style={styles.avatarContainer}>
-              {friend.profilePicture ? (
-                <Image
-                  source={{ uri: friend.profilePicture }}
-                  style={styles.avatarImage}
-                  resizeMode="cover"
-                  onError={(error) => {
-                    console.log('💬 PrivateChatScreen: Image load error:', error.nativeEvent.error);
-                    console.log('💬 PrivateChatScreen: Failed URL:', friend.profilePicture);
-                  }}
-                  onLoad={() => {
-                    console.log('💬 PrivateChatScreen: Image loaded successfully:', friend.profilePicture);
-                  }}
-                />
-              ) : (
-                <Text style={styles.avatar}>{item.avatar}</Text>
-              )}
+              <Ionicons 
+                name="person" 
+                size={20} 
+                color={colors.text.light} 
+              />
             </View>
           </View>
         )}

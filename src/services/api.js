@@ -244,29 +244,62 @@ class ApiService {
     // Token varsa Authorization header'ına ekle
     if (this.token) {
       config.headers.Authorization = `Bearer ${this.token}`;
+      console.log('🔑 Authorization header eklendi:', `Bearer ${this.token.substring(0, 20)}...`);
+    } else {
+      console.log('⚠️ Token yok, Authorization header eklenmedi');
     }
 
     try {
+      console.log('🌐 Making API request to:', url);
+      console.log('📋 Request config:', JSON.stringify(config, null, 2));
+      
       const response = await fetch(url, config);
+      
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
       
       // Response'un JSON olup olmadığını kontrol et
       let data;
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = { message: await response.text() };
+      
+      try {
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+          console.log('📄 Response data:', JSON.stringify(data, null, 2));
+        } else {
+          const textResponse = await response.text();
+          console.log('📄 Response text:', textResponse);
+          data = { message: textResponse };
+        }
+      } catch (parseError) {
+        console.error('❌ Error parsing response:', parseError);
+        data = { message: 'Response parse edilemedi' };
       }
 
       if (!response.ok) {
-        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+        console.error('❌ API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        
+        // Detaylı hata mesajı oluştur
+        let errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Backend'den gelen detaylı hata mesajını kullan
+        if (data.success === false && data.message) {
+          errorMessage = data.message;
+        }
+        
+        throw new Error(errorMessage);
       }
 
+      console.log('✅ API request successful');
       return data;
     } catch (error) {
-      console.error('API Error:', error);
-      console.error('API URL:', url);
-      console.error('Request config:', config);
+      console.error('❌ API Error:', error);
+      console.error('❌ API URL:', url);
+      console.error('❌ Request config:', JSON.stringify(config, null, 2));
       
       // Network hatası için özel mesaj
       if (error.message === 'Network request failed' || error.message.includes('Network request timed out')) {

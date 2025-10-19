@@ -67,8 +67,14 @@ export default function LocalChatScreen({ navigation }) {
   useEffect(() => {
     console.log('🔌 LocalChatScreen: Socket bağlantısı başlatılıyor...');
     
-    // Socket bağlantısını başlat
-    socketService.connect();
+    // Socket bağlantısını başlat (sadece bir kez)
+    if (!socketService.isSocketConnected()) {
+      console.log('🔌 LocalChatScreen: Socket bağlantısı yok, başlatılıyor...');
+      socketService.connect();
+    } else {
+      console.log('🔌 LocalChatScreen: Socket bağlantısı mevcut');
+      setIsSocketConnected(true);
+    }
 
     // Socket bağlantı durumunu kontrol et
     const checkConnection = () => {
@@ -86,17 +92,13 @@ export default function LocalChatScreen({ navigation }) {
         console.log('🔌 LocalChatScreen: Socket bağlantısı yok, tekrar deneniyor...');
         // Socket bağlantısını tekrar başlat
         socketService.connect();
-        // 500ms sonra tekrar kontrol et
-        setTimeout(() => {
-          checkConnection();
-        }, 500);
       }
     };
 
     // İlk kontrol
     checkConnection();
 
-    // Periyodik kontrol - çok sık kontrol et
+    // Periyodik kontrol - daha sık kontrol et
     const connectionInterval = setInterval(checkConnection, 1000);
 
     // Event listener'ları kaydet
@@ -138,6 +140,12 @@ export default function LocalChatScreen({ navigation }) {
     const handleConnectionStatus = (data) => {
       console.log('🔌 LocalChatScreen: Socket bağlantı durumu:', data);
       setIsSocketConnected(data.connected);
+      
+      // Debug bilgilerini logla
+      if (data.connected) {
+        const debugInfo = socketService.getDebugInfo();
+        console.log('🔍 LocalChatScreen: Socket debug bilgileri:', debugInfo);
+      }
     };
 
     // Event listener'ları kaydet
@@ -149,6 +157,7 @@ export default function LocalChatScreen({ navigation }) {
       clearInterval(connectionInterval);
       socketService.off('message_received', handleMessageReceived);
       socketService.off('connection_status', handleConnectionStatus);
+      console.log('🔌 LocalChatScreen: Event listener\'lar temizlendi, socket bağlantısı açık bırakılıyor');
     };
   }, [currentUser]);
 
@@ -288,22 +297,11 @@ export default function LocalChatScreen({ navigation }) {
         {!item.isOwn && (
           <View style={styles.messageAvatar}>
             <View style={styles.avatarContainer}>
-              {item.profilePicture ? (
-                <Image 
-                  source={{ uri: item.profilePicture }} 
-                  style={styles.avatarImage}
-                  defaultSource={require('../../assets/icon.png')}
-                  onError={(error) => {
-                    console.log('🌍 LocalChatScreen: Image load error:', error.nativeEvent.error);
-                    console.log('🌍 LocalChatScreen: Failed URL:', item.profilePicture);
-                  }}
-                  onLoad={() => {
-                    console.log('🌍 LocalChatScreen: Image loaded successfully:', item.profilePicture);
-                  }}
-                />
-              ) : (
-                <Text style={styles.avatar}>{item.avatar}</Text>
-              )}
+              <Ionicons 
+                name="person" 
+                size={20} 
+                color={colors.text.light} 
+              />
             </View>
           </View>
         )}

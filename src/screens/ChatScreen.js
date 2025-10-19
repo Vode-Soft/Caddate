@@ -720,22 +720,11 @@ export default function ChatScreen({ navigation, route }) {
       onPress={() => viewProfile(item)}
     >
       <View style={styles.friendAvatar}>
-        {item.profilePicture ? (
-          <Image 
-            source={{ uri: item.profilePicture }} 
-            style={styles.friendAvatarImage}
-            defaultSource={require('../../assets/icon.png')}
-            onError={(error) => {
-              console.log('👥 ChatScreen: Friend image load error:', error.nativeEvent.error);
-              console.log('👥 ChatScreen: Failed URL:', item.profilePicture);
-            }}
-            onLoad={() => {
-              console.log('👥 ChatScreen: Friend image loaded successfully:', item.profilePicture);
-            }}
-          />
-        ) : (
-          <Text style={styles.friendAvatarText}>{item.avatar}</Text>
-        )}
+        <Ionicons 
+          name="person" 
+          size={24} 
+          color={colors.text.light} 
+        />
         <View style={[
           styles.statusIndicator,
           { backgroundColor: getStatusColor(item.status) }

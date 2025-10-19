@@ -78,8 +78,40 @@ class ConfessionController {
   // İtirafları listele
   async getConfessions(req, res) {
     try {
+      console.log('📝 getConfessions called with:', req.query);
+      console.log('👤 User:', req.user);
+      
       const { page = 1, limit = 20, userId } = req.query;
       const offset = (page - 1) * limit;
+
+      // Confessions tablosunun var olup olmadığını kontrol et
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'confessions'
+        );
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        console.log('⚠️ Confessions table does not exist, creating...');
+        
+        // Tabloyu oluştur
+        await pool.query(`
+          CREATE TABLE confessions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            is_anonymous BOOLEAN DEFAULT true,
+            likes_count INTEGER DEFAULT 0,
+            comments_count INTEGER DEFAULT 0,
+            is_approved BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        
+        console.log('✅ Confessions table created');
+      }
 
       let query = `
         SELECT 
@@ -111,7 +143,11 @@ class ConfessionController {
       query += ` ORDER BY c.created_at DESC LIMIT $${++paramCount} OFFSET $${++paramCount}`;
       queryParams.push(parseInt(limit), offset);
 
+      console.log('🔍 Executing query:', query);
+      console.log('📋 Query params:', queryParams);
+
       const result = await pool.query(query, queryParams);
+      console.log('✅ Query executed successfully, rows:', result.rows.length);
 
       // Toplam sayıyı al
       let countQuery = 'SELECT COUNT(*) FROM confessions WHERE is_approved = true';
@@ -151,10 +187,34 @@ class ConfessionController {
       });
 
     } catch (error) {
-      console.error('Get confessions error:', error);
+      console.error('❌ Get confessions error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack
+      });
+      
+      // PostgreSQL hatalarını özel olarak ele al
+      let errorMessage = 'İtiraflar yüklenirken bir hata oluştu';
+      
+      if (error.code === '42P01') {
+        errorMessage = 'Confessions tablosu bulunamadı. Lütfen yönetici ile iletişime geçin.';
+      } else if (error.code === '23503') {
+        errorMessage = 'Veritabanı bağlantı hatası. Lütfen tekrar deneyin.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       res.status(500).json({
         success: false,
-        message: 'İtiraflar yüklenirken bir hata oluştu'
+        message: errorMessage,
+        error: {
+          code: error.code,
+          detail: error.detail,
+          hint: error.hint
+        }
       });
     }
   }

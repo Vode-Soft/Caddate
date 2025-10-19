@@ -82,14 +82,14 @@ class SocketService {
         auth: {
           token: token
         },
-        timeout: 10000, // Render için daha uzun timeout
+        timeout: 5000, // Daha hızlı timeout
         forceNew: true,
         autoConnect: true,
         reconnection: true,
-        reconnectionDelay: 1000, // Render için daha uzun delay
-        reconnectionAttempts: 10, // Render için daha az deneme
-        maxReconnectionAttempts: 10,
-        randomizationFactor: 0.5 // Daha fazla rastgelelik
+        reconnectionDelay: 500, // Daha hızlı yeniden bağlanma
+        reconnectionAttempts: 8, // Daha az deneme
+        maxReconnectionAttempts: 8,
+        randomizationFactor: 0.3 // Daha az rastgelelik
       };
 
       // Render URL'i için özel transport ayarları
@@ -116,6 +116,23 @@ class SocketService {
     }
   }
 
+  // Mevcut event listener'ları yeniden kaydet
+  reregisterEventListeners() {
+    console.log('SocketService: Mevcut event listener\'lar yeniden kaydediliyor...');
+    console.log('SocketService: Mevcut listeners:', Object.keys(this.listeners));
+    
+    // Her event için socket listener'ı ekle
+    Object.keys(this.listeners).forEach(event => {
+      if (this.listeners[event].length > 0 && !this.hasListeners(event)) {
+        console.log(`SocketService: ${event} event'i için socket listener ekleniyor`);
+        this.socket.on(event, (data) => {
+          console.log('SocketService: Socket event alındı:', event, data);
+          this.emitLocal(event, data);
+        });
+      }
+    });
+  }
+
   // Event listener'ları ayarla
   setupEventListeners() {
     if (!this.socket) return;
@@ -130,6 +147,9 @@ class SocketService {
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this.emitLocal('connection_status', { connected: true });
+      
+      // Mevcut event listener'ları yeniden kaydet
+      this.reregisterEventListeners();
       
       // Online kullanıcı listesini iste
       this.emitToSocket('request_online_users');
@@ -528,6 +548,12 @@ class SocketService {
     return this.socket ? this.socket.id : null;
   }
 
+  // Socket'in belirli bir event için listener'ı olup olmadığını kontrol et
+  hasListeners(event) {
+    if (!this.socket) return false;
+    return this.socket.hasListeners && this.socket.hasListeners(event);
+  }
+
   // Event listener ekle (component'lardan)
   on(event, callback) {
     console.log('SocketService: Event listener eklendi:', event);
@@ -543,6 +569,15 @@ class SocketService {
       console.log('SocketService: Listeners for', event, ':', this.listeners[event].length);
     } else {
       console.log('SocketService: Callback zaten mevcut, eklenmedi');
+    }
+    
+    // Eğer socket bağlıysa ve bu event için socket listener yoksa ekle
+    if (this.socket && this.isConnected && !this.hasListeners(event)) {
+      console.log('SocketService: Socket listener ekleniyor:', event);
+      this.socket.on(event, (data) => {
+        console.log('SocketService: Socket event alındı:', event, data);
+        this.emitLocal(event, data);
+      });
     }
   }
 
@@ -613,7 +648,12 @@ class SocketService {
       transport: this.socket?.io?.engine?.transport?.name,
       readyState: this.socket?.io?.readyState,
       reconnectAttempts: this.reconnectAttempts,
-      maxReconnectAttempts: this.maxReconnectAttempts
+      maxReconnectAttempts: this.maxReconnectAttempts,
+      listeners: Object.keys(this.listeners),
+      listenerCounts: Object.keys(this.listeners).reduce((acc, event) => {
+        acc[event] = this.listeners[event].length;
+        return acc;
+      }, {})
     };
   }
 
