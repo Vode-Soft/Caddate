@@ -75,8 +75,9 @@ export default {
     ],
     extra: {
       // Environment variables
-      apiUrl: process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? "http://192.168.1.9:3000" : "https://your-production-api.com"),
-      socketUrl: process.env.EXPO_PUBLIC_SOCKET_URL || (__DEV__ ? "http://192.168.1.9:3000" : "wss://your-production-api.com"),
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_RENDER_BACKEND_URL || (__DEV__ ? "http://192.168.1.9:3000" : "https://your-production-api.com"),
+      renderBackendUrl: process.env.EXPO_PUBLIC_RENDER_BACKEND_URL,
+      socketUrl: process.env.EXPO_PUBLIC_SOCKET_URL || process.env.EXPO_PUBLIC_RENDER_BACKEND_URL || (__DEV__ ? "http://192.168.1.9:3000" : "wss://your-production-api.com"),
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "your_google_maps_api_key",
       environment: process.env.NODE_ENV || "development",
       eas: {

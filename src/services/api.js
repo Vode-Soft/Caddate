@@ -12,6 +12,17 @@ const getApiBaseUrl = () => {
     const expoUrl = Constants.expoConfig?.hostUri || Constants.expoGoConfig?.hostUri;
     console.log('Expo URL detected:', expoUrl);
     
+    // Render backend URL'ini kontrol et - Bu URL'yi Render dashboard'unuzdan alın
+    // Örnek: https://caddate-backend-abc123.onrender.com
+    const renderBackendUrl = 'https://your-render-app-name.onrender.com';
+    
+    // Eğer Render URL'i ayarlanmışsa kullan
+    if (renderBackendUrl && renderBackendUrl !== 'https://your-render-app-name.onrender.com') {
+      console.log('Render backend URL detected - using Render URL');
+      console.log(`Using Render backend URL: ${renderBackendUrl}`);
+      return `${renderBackendUrl}/api`;
+    }
+    
     if (expoUrl && (expoUrl.includes('exp.direct') || expoUrl.includes('ngrok.io'))) {
       // Tunnel modu - internet üzerinden erişilebilir bir URL kullan
       console.log('Tunnel mode detected - using tunnel-compatible URL');
@@ -31,7 +42,7 @@ const getApiBaseUrl = () => {
   }
   
   // Production için - Environment değişkenlerinden al
-  const productionUrl = process.env.EXPO_PUBLIC_API_URL || 'https://your-production-api.com';
+  const productionUrl = process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_RENDER_BACKEND_URL || 'https://your-production-api.com';
   console.log('Production mode - using API URL:', productionUrl);
   return `${productionUrl}/api`;
 };

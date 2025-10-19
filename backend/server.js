@@ -45,6 +45,7 @@ const getCorsOrigins = () => {
     return [
       process.env.FRONTEND_URL,
       process.env.PRODUCTION_FRONTEND_URL,
+      // Expo development URLs
       "https://*.exp.direct",
       "https://*.exp.direct:443",
       "https://*.exp.direct:80",
@@ -54,7 +55,9 @@ const getCorsOrigins = () => {
       "exp://*.exp.direct:443",
       "exp://*.exp.direct:80",
       "exp://*.exp.direct:19000",
-      "exp://*.exp.direct:19006"
+      "exp://*.exp.direct:19006",
+      // React Native app URLs
+      "*" // Geçici olarak tüm origin'lere izin ver
     ].filter(Boolean);
   } else {
     return [
@@ -70,8 +73,12 @@ const getCorsOrigins = () => {
       "http://192.168.1.2:19000",
       "http://192.168.1.9:19006",
       "http://192.168.1.9:19000",
+      "http://192.168.1.17:19006",
+      "http://192.168.1.17:19000",
       "exp://192.168.1.2:19000",
       "exp://192.168.1.9:19000",
+      "exp://192.168.1.17:19000",
+      // Expo URLs
       "https://*.exp.direct",
       "https://*.exp.direct:443",
       "https://*.exp.direct:80",
@@ -84,7 +91,9 @@ const getCorsOrigins = () => {
       "exp://*.exp.direct:19006",
       // Ngrok tunnel URL'leri için
       "https://*.ngrok.io",
-      "https://*.ngrok-free.app"
+      "https://*.ngrok-free.app",
+      // React Native app URLs - geçici olarak tüm origin'lere izin ver
+      "*"
     ];
   }
 };
