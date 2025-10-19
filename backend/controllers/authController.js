@@ -151,7 +151,31 @@ const login = async (req, res) => {
 
     // Kullanıcıyı bul
     console.log('🔍 Searching for user with email:', email);
-    const user = await User.findByEmail(email);
+    let user;
+    try {
+      user = await User.findByEmail(email);
+    } catch (dbError) {
+      console.error('❌ Database error during user lookup:', dbError.message);
+      
+      // Bağlantı hatası ise özel mesaj
+      if (dbError.message.includes('Connection terminated') || 
+          dbError.message.includes('timeout') ||
+          dbError.code === 'ECONNRESET') {
+        return res.status(503).json({
+          success: false,
+          message: 'Veritabanı bağlantısı geçici olarak kullanılamıyor. Lütfen tekrar deneyin.',
+          error_code: 'DATABASE_CONNECTION_ERROR'
+        });
+      }
+      
+      // Diğer veritabanı hataları
+      return res.status(500).json({
+        success: false,
+        message: 'Sunucu hatası',
+        error_code: 'DATABASE_ERROR'
+      });
+    }
+    
     if (!user) {
       console.log('❌ User not found');
       return res.status(401).json({

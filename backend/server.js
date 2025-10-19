@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: './config.env' });
 
 // Import database connection
-const { testConnection, pool } = require('./config/database');
+const { testConnection, pool, checkConnectionHealth } = require('./config/database');
 
 // Import email service
 const emailService = require('./services/emailService');
@@ -145,9 +145,26 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+// Health check with database connection status
+app.get('/health', async (req, res) => {
+  try {
+    const dbHealthy = await checkConnectionHealth();
+    const status = dbHealthy ? 'OK' : 'DEGRADED';
+    
+    res.json({ 
+      status, 
+      timestamp: new Date().toISOString(),
+      database: dbHealthy ? 'connected' : 'disconnected',
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      database: 'error',
+      error: error.message
+    });
+  }
 });
 
 // Socket.io middleware for authentication
@@ -821,12 +838,21 @@ const startServer = async () => {
       console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
     }
     
-    server.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', async () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
       console.log(`📧 Email Service: ${emailService.isConfigured ? 'Aktif' : 'Pasif'}`);
       console.log(`🔌 Socket.io: Aktif`);
+      
+      // Database health check
+      try {
+        const dbHealthy = await checkConnectionHealth();
+        console.log(`🗄️  Database: ${dbHealthy ? 'Bağlı' : 'Bağlantı Sorunu'}`);
+      } catch (error) {
+        console.log(`❌ Database Health Check Failed: ${error.message}`);
+      }
+      
       console.log(`📊 API Endpoints:`);
       console.log(`   - Auth: http://localhost:${PORT}/api/auth`);
       console.log(`   - Users: http://localhost:${PORT}/api/users`);

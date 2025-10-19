@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { pool, executeQuery } = require('../config/database');
 
 class User {
   // Kullanıcı oluşturma
@@ -26,9 +26,12 @@ class User {
     const query = 'SELECT * FROM users WHERE email = $1';
     
     try {
-      const result = await pool.query(query, [email]);
+      console.log('🔍 User.findByEmail - Attempting to find user with email:', email);
+      const result = await executeQuery(query, [email]);
+      console.log('✅ User.findByEmail - Query successful, found user:', result.rows.length > 0 ? 'Yes' : 'No');
       return result.rows[0];
     } catch (error) {
+      console.error('❌ User.findByEmail - Database error:', error.message);
       throw error;
     }
   }
@@ -49,7 +52,7 @@ class User {
     `;
     
     try {
-      const result = await pool.query(query, [id]);
+      const result = await executeQuery(query, [id]);
       return result.rows[0];
     } catch (error) {
       throw error;
