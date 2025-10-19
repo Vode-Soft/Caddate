@@ -45,25 +45,23 @@ export default function ConfessionScreen() {
   const loadConfessions = async () => {
     try {
       setIsLoading(true);
-      // TODO: Implement API call to fetch confessions
-      // const response = await apiService.getConfessions();
-      // setConfessions(response.confessions || []);
       
-      // Mock data for now
-      setConfessions([
-        {
-          id: 1,
-          content: "Bugün çok güzel bir gün geçirdim, kimse bilmiyor ama içimde büyük bir mutluluk var.",
-          timestamp: "2 saat önce",
-          likes: 12
-        },
-        {
-          id: 2,
-          content: "Bazen kendimi çok yalnız hissediyorum ama bunu kimseye söyleyemiyorum.",
-          timestamp: "5 saat önce",
-          likes: 8
-        }
-      ]);
+      // Token kontrolü
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      const response = await apiService.getConfessions({ page: 1, limit: 20 });
+      
+      if (response.success) {
+        setConfessions(response.data.confessions || []);
+      } else {
+        Alert.alert('Hata', response.message || 'İtiraflar yüklenemedi');
+      }
     } catch (error) {
       console.error('İtiraflar yüklenirken hata:', error);
       Alert.alert('Hata', 'İtiraflar yüklenirken bir hata oluştu.');
@@ -86,25 +84,52 @@ export default function ConfessionScreen() {
     try {
       setIsSubmitting(true);
       
-      // TODO: Implement API call to submit confession
-      // const response = await apiService.submitConfession({ content: confession.trim() });
+      // Token kontrolü
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
       
-      // Mock success for now
-      Alert.alert('Başarılı', 'İtirafınız gönderildi. Anonim olarak paylaşılacaktır.', [
-        {
-          text: 'Tamam',
-          onPress: () => {
-            setConfession('');
-            loadConfessions(); // Refresh the list
+      apiService.setToken(token);
+      
+      const response = await apiService.createConfession(confession.trim(), true);
+      
+      if (response.success) {
+        Alert.alert('Başarılı', 'İtirafınız paylaşıldı!', [
+          {
+            text: 'Tamam',
+            onPress: () => {
+              setConfession('');
+              loadConfessions(); // Refresh the list
+            }
           }
-        }
-      ]);
+        ]);
+      } else {
+        Alert.alert('Hata', response.message || 'İtiraf paylaşılamadı');
+      }
       
     } catch (error) {
       console.error('İtiraf gönderilirken hata:', error);
-      Alert.alert('Hata', 'İtiraf gönderilirken bir hata oluştu.');
+      Alert.alert('Hata', error.message || 'İtiraf gönderilirken bir hata oluştu.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleLikeConfession = async (confessionId) => {
+    try {
+      const response = await apiService.likeConfession(confessionId);
+      if (response.success) {
+        // Beğeni sayısını güncelle
+        setConfessions(prev => prev.map(confession => 
+          confession.id === confessionId 
+            ? { ...confession, likesCount: (confession.likesCount || 0) + 1 }
+            : confession
+        ));
+      }
+    } catch (error) {
+      console.error('Like confession error:', error);
     }
   };
 
@@ -113,10 +138,13 @@ export default function ConfessionScreen() {
       <View style={styles.confessionContent}>
         <Text style={styles.confessionText}>{item.content}</Text>
         <View style={styles.confessionFooter}>
-          <Text style={styles.confessionTimestamp}>{item.timestamp}</Text>
-          <TouchableOpacity style={styles.likeButton}>
+          <Text style={styles.confessionTimestamp}>{item.timeAgo || item.timestamp}</Text>
+          <TouchableOpacity 
+            style={styles.likeButton}
+            onPress={() => handleLikeConfession(item.id)}
+          >
             <Ionicons name="heart-outline" size={scale(16)} color={colors.text.secondary} />
-            <Text style={styles.likeCount}>{item.likes}</Text>
+            <Text style={styles.likeCount}>{item.likesCount || item.likes || 0}</Text>
           </TouchableOpacity>
         </View>
       </View>

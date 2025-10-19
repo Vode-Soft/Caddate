@@ -30,6 +30,10 @@ const subscriptionRoutes = require('./routes/subscriptions');
 const adminRoutes = require('./routes/admin');
 const matchRoutes = require('./routes/matches');
 const supportRoutes = require('./routes/support');
+const confessionRoutes = require('./routes/confessions');
+const pushNotificationRoutes = require('./routes/pushNotifications');
+const friendSuggestionsRoutes = require('./routes/friendSuggestions');
+const analyticsRoutes = require('./routes/analytics');
 
 // Import models
 const Activity = require('./models/Activity');
@@ -692,6 +696,10 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/confessions', confessionRoutes);
+app.use('/api/push-notifications', pushNotificationRoutes);
+app.use('/api/friend-suggestions', friendSuggestionsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -14,10 +14,11 @@ const getApiBaseUrl = () => {
     
     // Render backend URL'ini kontrol et - Bu URL'yi Render dashboard'unuzdan alın
     // Örnek: https://caddate-backend-abc123.onrender.com
-    const renderBackendUrl = 'https://your-render-app-name.onrender.com';
+    // RENDER URL'İNİZİ BURAYA YAZIN:
+    const renderBackendUrl = 'https://caddate.onrender.com';
     
     // Eğer Render URL'i ayarlanmışsa kullan
-    if (renderBackendUrl && renderBackendUrl !== 'https://your-render-app-name.onrender.com') {
+    if (renderBackendUrl && renderBackendUrl.includes('onrender.com')) {
       console.log('Render backend URL detected - using Render URL');
       console.log(`Using Render backend URL: ${renderBackendUrl}`);
       return `${renderBackendUrl}/api`;
@@ -905,6 +906,46 @@ class ApiService {
   async getMatchStats() {
     console.log('API: Getting match stats');
     return this.get('/matches/stats');
+  }
+
+  // ==================== CONFESSIONS API ====================
+  
+  // İtiraf oluştur
+  async createConfession(content, isAnonymous = true) {
+    console.log('API: Creating confession:', { content: content.substring(0, 50) + '...', isAnonymous });
+    return this.post('/confessions', { content, isAnonymous });
+  }
+
+  // İtirafları listele
+  async getConfessions(params = {}) {
+    const { page = 1, limit = 20, userId } = params;
+    console.log('API: Getting confessions:', { page, limit, userId });
+    return this.get(`/confessions?page=${page}&limit=${limit}${userId ? `&userId=${userId}` : ''}`);
+  }
+
+  // Kullanıcının itiraflarını getir
+  async getMyConfessions(params = {}) {
+    const { page = 1, limit = 20 } = params;
+    console.log('API: Getting my confessions:', { page, limit });
+    return this.get(`/confessions/my?page=${page}&limit=${limit}`);
+  }
+
+  // İtiraf beğen
+  async likeConfession(confessionId) {
+    console.log('API: Liking confession:', confessionId);
+    return this.post(`/confessions/${confessionId}/like`);
+  }
+
+  // İtiraf beğenisini geri al
+  async unlikeConfession(confessionId) {
+    console.log('API: Unliking confession:', confessionId);
+    return this.delete(`/confessions/${confessionId}/like`);
+  }
+
+  // İtiraf sil
+  async deleteConfession(confessionId) {
+    console.log('API: Deleting confession:', confessionId);
+    return this.delete(`/confessions/${confessionId}`);
   }
 
 }
