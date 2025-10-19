@@ -1,4 +1,5 @@
 import { Dimensions, Platform, StatusBar } from 'react-native';
+import Constants from 'expo-constants';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -7,8 +8,8 @@ const baseWidth = 390;
 const baseHeight = 844;
 
 // Device type detection
-export const isIOS = Platform.OS === 'ios';
-export const isAndroid = Platform.OS === 'android';
+export const isIOS = Platform?.OS === 'ios' || Constants?.platform?.ios === true;
+export const isAndroid = Platform?.OS === 'android' || Constants?.platform?.android === true;
 export const isTablet = screenWidth >= 768;
 export const isSmallScreen = screenWidth < 375;
 export const isMediumScreen = screenWidth >= 375 && screenWidth < 414;
@@ -69,10 +70,14 @@ export const getResponsiveFontSize = (size) => {
 
 // Safe area helpers
 export const getStatusBarHeight = () => {
-  if (isIOS) {
-    return StatusBar.currentHeight || 0;
+  try {
+    if (isIOS) {
+      return StatusBar?.currentHeight || Constants?.statusBarHeight || 44;
+    }
+    return StatusBar?.currentHeight || Constants?.statusBarHeight || 24;
+  } catch (error) {
+    return isIOS ? 44 : 24;
   }
-  return StatusBar.currentHeight || 0;
 };
 
 export const getBottomSafeArea = () => {

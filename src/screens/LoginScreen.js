@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import apiService from '../services/api';
 import { colors } from '../constants/colors';
+import Constants from 'expo-constants';
 import { 
   scale, 
   verticalScale, 
@@ -126,7 +127,7 @@ export default function LoginScreen({ navigation, onAuthentication }) {
     >
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={(Platform?.OS === 'ios' || Constants?.platform?.ios) ? 'padding' : 'height'}
           style={styles.keyboardView}
         >
           <View style={styles.content}>

@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { colors } from '../constants/colors';
 import apiService from '../services/api';
 import socketService from '../services/socketService';
@@ -903,7 +904,7 @@ export default function MapScreen() {
 
         {/* Map */}
         <View style={styles.map}>
-          {Platform.OS === 'ios' ? (
+          {(Platform?.OS === 'ios' || Constants?.platform?.ios) ? (
             // iOS: Apple Maps
             <MapView
               ref={mapRef}
@@ -995,7 +996,7 @@ export default function MapScreen() {
                 <Ionicons name="map-outline" size={64} color={colors.primary} />
                 <Text style={styles.placeholderTitle}>Harita</Text>
                 <Text style={styles.placeholderSubtitle}>
-                  {Platform.OS === 'ios' ? 'iOS için harita yükleniyor...' : 'Android için harita özelliği yakında gelecek'}
+                  {(Platform?.OS === 'ios' || Constants?.platform?.ios) ? 'iOS için harita yükleniyor...' : 'Android için harita özelliği yakında gelecek'}
                 </Text>
                 <Text style={styles.placeholderInfo}>
                   Konumunuz: {location && location.latitude && location.longitude ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 'Alınıyor...'}
@@ -1205,7 +1206,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
-    paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 24,
+    paddingTop: (Platform?.OS === 'ios' || Constants?.platform?.ios) ? 44 : (StatusBar?.currentHeight || Constants?.statusBarHeight || 24),
   },
   headerBackground: {
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
@@ -1314,7 +1315,7 @@ const styles = StyleSheet.create({
   speedIndicator: {
     position: 'absolute',
     left: scale(isTablet ? 24 : isSmallScreen ? 12 : 16),
-    top: Platform.OS === 'ios' ? 44 + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70) : (StatusBar.currentHeight || 24) + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70),
+    top: (Platform?.OS === 'ios' || Constants?.platform?.ios) ? 44 + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70) : (StatusBar?.currentHeight || Constants?.statusBarHeight || 24) + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70),
     zIndex: 1000,
     backgroundColor: 'rgba(26, 26, 26, 0.95)',
     borderRadius: scale(isTablet ? 20 : isSmallScreen ? 14 : 16),
