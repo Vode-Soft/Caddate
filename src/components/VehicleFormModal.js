@@ -343,7 +343,7 @@ const VehicleFormModal = ({ visible, vehicle, onSave, onCancel, isLoading }) => 
               onPress={handleSubmit}
               disabled={isLoading}
             >
-              <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+              <Ionicons name="checkmark" size={20} color={colors.text.light} />
               <Text style={styles.saveButtonText}>
                 {isLoading ? 'Kaydediliyor...' : 'Kaydet'}
               </Text>

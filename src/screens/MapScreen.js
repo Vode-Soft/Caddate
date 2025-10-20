@@ -932,52 +932,7 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        {/* Modern Header */}
-        <Animated.View 
-          style={[
-            styles.header,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <View style={styles.headerBackground}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <View style={styles.headerIcon}>
-                  <Ionicons name="map" size={24} color="#FFFFFF" />
-                </View>
-                <View>
-                  <Text style={styles.headerTitle}>Harita</Text>
-                </View>
-              </View>
-              
-              <View style={styles.headerRight}>
-                <TouchableOpacity
-                  style={[
-                    styles.locationToggleButton,
-                    isLocationSharing && styles.locationToggleButtonActive
-                  ]}
-                  onPress={toggleLocationSharing}
-                >
-                  <Ionicons
-                    name={isLocationSharing ? 'location' : 'location-outline'}
-                    size={18}
-                    color={isLocationSharing ? '#FFFFFF' : colors.primary}
-                  />
-                </TouchableOpacity>
-                
-                <View style={styles.statusIndicator}>
-                  <View style={[
-                    styles.statusDot,
-                    { backgroundColor: isLocationSharing ? colors.success : colors.warning }
-                  ]} />
-                </View>
-              </View>
-            </View>
-          </View>
-        </Animated.View>
+        {/* Üst başlık kaldırıldı */}
 
         {/* Map */}
         <View style={styles.map}>
@@ -1151,6 +1106,22 @@ export default function MapScreen() {
                 name={mapType === 'standard' ? 'map' : 'globe'}
                 size={isTablet ? 28 : 24}
                 color={colors.primary}
+              />
+            </TouchableOpacity>
+
+            {/* Konumu Aktif Et/Paylaşımı Aç-Kapat Butonu - Alt Sağ'a taşındı */}
+            <TouchableOpacity
+              style={[
+                styles.controlButton,
+                isLocationSharing && styles.controlButtonActive
+              ]}
+              onPress={toggleLocationSharing}
+              accessibilityLabel={isLocationSharing ? 'Konum Paylaşımını Durdur' : 'Konum Paylaşımını Başlat'}
+            >
+              <Ionicons
+                name={isLocationSharing ? 'location' : 'location-outline'}
+                size={isTablet ? 28 : 24}
+                color={isLocationSharing ? '#FFFFFF' : colors.primary}
               />
             </TouchableOpacity>
 
@@ -1387,59 +1358,69 @@ const styles = StyleSheet.create({
   speedIndicator: {
     position: 'absolute',
     left: scale(isTablet ? 24 : isSmallScreen ? 12 : 16),
-    top: (Platform?.OS === 'ios' || Constants?.platform?.ios) ? 44 + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70) : (StatusBar?.currentHeight || Constants?.statusBarHeight || 24) + verticalScale(isTablet ? 90 : isSmallScreen ? 60 : 70),
+    top: (Platform?.OS === 'ios' || Constants?.platform?.ios)
+      ? 44 + verticalScale(isTablet ? 12 : isSmallScreen ? 10 : 12)
+      : (StatusBar?.currentHeight || Constants?.statusBarHeight || 24) + verticalScale(isTablet ? 12 : isSmallScreen ? 10 : 12),
     zIndex: 1000,
-    backgroundColor: 'rgba(26, 26, 26, 0.95)',
-    borderRadius: scale(isTablet ? 20 : isSmallScreen ? 14 : 16),
-    padding: scale(isTablet ? 20 : isSmallScreen ? 12 : 16),
-    shadowColor: colors.shadow.dark,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderRadius: scale(isTablet ? 10 : isSmallScreen ? 8 : 10),
+    paddingHorizontal: scale(isTablet ? 12 : isSmallScreen ? 8 : 10),
+    paddingVertical: verticalScale(isTablet ? 6 : isSmallScreen ? 4 : 5),
+    shadowColor: 'transparent',
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 0,
     },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    minWidth: scale(isTablet ? 140 : isSmallScreen ? 100 : 120),
-    backdropFilter: 'blur(20px)',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    minWidth: 0,
+    backdropFilter: undefined,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   speedContainer: {
     alignItems: 'center',
-    marginBottom: verticalScale(isTablet ? 8 : 6),
+    marginBottom: 0,
+    flexDirection: 'row',
   },
   speedValue: {
     fontSize: scaleFont(isTablet ? 36 : 28),
     fontWeight: '800',
-    color: colors.primary,
+    color: '#FFFFFF',
     lineHeight: scaleFont(isTablet ? 40 : 32),
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
   },
   speedUnit: {
     fontSize: scaleFont(isTablet ? 16 : 14),
     fontWeight: '600',
-    color: colors.text.secondary,
-    marginTop: verticalScale(isTablet ? -4 : -2),
+    color: '#FFFFFFCC',
+    marginTop: 0,
+    marginLeft: scale(6),
     opacity: 0.8,
   },
   speedStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    marginLeft: scale(isTablet ? 12 : 10),
   },
   speedDot: {
     width: scale(isTablet ? 8 : 6),
     height: scale(isTablet ? 8 : 6),
     borderRadius: scale(isTablet ? 4 : 3),
     marginRight: scale(isTablet ? 6 : 4),
+    borderWidth: 1,
+    borderColor: '#FFFFFF88',
   },
   speedStatusText: {
     fontSize: scaleFont(isTablet ? 13 : 11),
     fontWeight: '600',
-    color: colors.text.secondary,
+    color: '#FFFFFFCC',
     opacity: 0.9,
   },
   controlButtons: {

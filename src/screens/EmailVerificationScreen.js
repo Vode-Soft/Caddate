@@ -91,7 +91,7 @@ export default function EmailVerificationScreen({ navigation, route }) {
 
   return (
     <LinearGradient
-      colors={colors.gradients.primary}
+      colors={colors.gradients.redBlack}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   verifyButton: {
-    backgroundColor: colors.text.primary,
+    backgroundColor: colors.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -265,21 +265,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightGray,
   },
   verifyButtonText: {
-    color: colors.background,
+    color: colors.text.light,
     fontSize: scaleFont(16),
     fontWeight: 'bold',
   },
   resendButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.text.primary,
+    borderColor: colors.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
   },
   resendButtonText: {
-    color: colors.text.primary,
+    color: colors.primary,
     fontSize: scaleFont(16),
     fontWeight: '600',
   },

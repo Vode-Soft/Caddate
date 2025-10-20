@@ -1,6 +1,26 @@
 const { pool } = require('../config/database');
 
-class ConfessionController {
+ // Yardımcı zaman formatlama fonksiyonu (class dışına alındı ki this'e ihtiyaç olmasın)
+ function getTimeAgo(date) {
+   const now = new Date();
+   const past = new Date(date);
+   const diffInSeconds = Math.floor((now - past) / 1000);
+
+   if (diffInSeconds < 60) {
+     return 'Az önce';
+   } else if (diffInSeconds < 3600) {
+     const minutes = Math.floor(diffInSeconds / 60);
+     return `${minutes} dakika önce`;
+   } else if (diffInSeconds < 86400) {
+     const hours = Math.floor(diffInSeconds / 3600);
+     return `${hours} saat önce`;
+   } else {
+     const days = Math.floor(diffInSeconds / 86400);
+     return `${days} gün önce`;
+   }
+ }
+
+ class ConfessionController {
   // İtiraf oluştur
   async createConfession(req, res) {
     try {
@@ -160,7 +180,7 @@ class ConfessionController {
       const countResult = await pool.query(countQuery, countParams);
       const totalCount = parseInt(countResult.rows[0].count);
 
-      const confessions = result.rows.map(row => ({
+       const confessions = result.rows.map(row => ({
         id: row.id,
         content: row.content,
         isAnonymous: row.is_anonymous,
@@ -169,7 +189,7 @@ class ConfessionController {
         likesCount: row.likes_count,
         commentsCount: row.comments_count,
         createdAt: row.created_at,
-        timeAgo: this.getTimeAgo(row.created_at)
+         timeAgo: getTimeAgo(row.created_at)
       }));
 
       res.json({
@@ -329,7 +349,7 @@ class ConfessionController {
         [userId, limit, offset]
       );
 
-      const confessions = result.rows.map(row => ({
+       const confessions = result.rows.map(row => ({
         id: row.id,
         content: row.content,
         isAnonymous: row.is_anonymous,
@@ -337,7 +357,7 @@ class ConfessionController {
         commentsCount: row.comments_count,
         isApproved: row.is_approved,
         createdAt: row.created_at,
-        timeAgo: this.getTimeAgo(row.created_at)
+         timeAgo: getTimeAgo(row.created_at)
       }));
 
       res.json({
@@ -397,25 +417,7 @@ class ConfessionController {
     }
   }
 
-  // Zaman farkını hesapla
-  getTimeAgo(date) {
-    const now = new Date();
-    const past = new Date(date);
-    const diffInSeconds = Math.floor((now - past) / 1000);
-
-    if (diffInSeconds < 60) {
-      return 'Az önce';
-    } else if (diffInSeconds < 3600) {
-      const minutes = Math.floor(diffInSeconds / 60);
-      return `${minutes} dakika önce`;
-    } else if (diffInSeconds < 86400) {
-      const hours = Math.floor(diffInSeconds / 3600);
-      return `${hours} saat önce`;
-    } else {
-      const days = Math.floor(diffInSeconds / 86400);
-      return `${days} gün önce`;
-    }
-  }
+   // Zaman farkını hesapla (artık üstteki yardımcı fonksiyon kullanılıyor)
 }
 
 module.exports = new ConfessionController();

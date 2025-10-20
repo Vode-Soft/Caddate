@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const querystring = require('querystring');
 
 class EmailService {
   constructor() {
@@ -104,7 +105,8 @@ class EmailService {
   // Email gönderme
   async sendEmail(to, subject, html, text) {
     if (!this.isConfigured) {
-      throw new Error('Email servisi yapılandırılmamış');
+      // SMTP yapılandırılmamışsa HTTP sağlayıcı fallback'ini dene
+      return await this.sendViaHttpProvider(to, subject, html, text);
     }
 
     try {
@@ -150,10 +152,78 @@ class EmailService {
           return result;
         } catch (retryError) {
           console.error('❌ Retry de başarısız:', retryError.message);
-          throw error;
+          // SMTP tamamen başarısızsa HTTP sağlayıcıya düş
+          return await this.sendViaHttpProvider(to, subject, html, text);
         }
       }
-      throw error;
+      // Diğer hatalarda da HTTP sağlayıcıya düşmeyi dene
+      return await this.sendViaHttpProvider(to, subject, html, text);
+    }
+  }
+
+  // SMTP başarısız olursa HTTP e-posta sağlayıcı (SendGrid/Mailgun) ile gönderim
+  async sendViaHttpProvider(to, subject, html, text) {
+    const provider = (process.env.EMAIL_HTTP_PROVIDER || '').toLowerCase();
+    try {
+      if (provider === 'sendgrid' && process.env.SENDGRID_API_KEY) {
+        const payload = {
+          personalizations: [{ to: [{ email: to }] }],
+          from: { email: process.env.SMTP_FROM || 'noreply@caddateapp.com', name: 'CaddateApp' },
+          subject,
+          content: [
+            { type: 'text/plain', value: text || '' },
+            { type: 'text/html', value: html || '' }
+          ]
+        };
+
+        const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          console.log('✅ SendGrid ile email gönderildi');
+          return { messageId: res.headers.get('x-message-id') || 'sendgrid' };
+        }
+        const errText = await res.text();
+        throw new Error(`SendGrid hata: ${res.status} ${errText}`);
+      }
+
+      if (provider === 'mailgun' && process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+        const auth = Buffer.from(`api:${process.env.MAILGUN_API_KEY}`).toString('base64');
+        const body = querystring.stringify({
+          from: process.env.SMTP_FROM || `CaddateApp <mailgun@${process.env.MAILGUN_DOMAIN}>`,
+          to,
+          subject,
+          text: text || '',
+          html: html || ''
+        });
+
+        const res = await fetch(`https://api.mailgun.net/v3/${process.env.MAILGUN_DOMAIN}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body
+        });
+        if (res.ok) {
+          console.log('✅ Mailgun ile email gönderildi');
+          const data = await res.json().catch(() => ({}));
+          return { messageId: data.id || 'mailgun' };
+        }
+        const errText = await res.text();
+        throw new Error(`Mailgun hata: ${res.status} ${errText}`);
+      }
+
+      // HTTP sağlayıcı yapılandırılmamışsa hata fırlat
+      throw new Error('SMTP başarısız ve HTTP email sağlayıcı yapılandırılmamış');
+    } catch (httpErr) {
+      console.error('❌ HTTP email sağlayıcı hatası:', httpErr.message);
+      throw httpErr;
     }
   }
 
