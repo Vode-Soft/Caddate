@@ -268,7 +268,13 @@ export default function ConfessionScreen() {
     }
   };
 
-  const renderConfessionItem = ({ item }) => (
+  const renderConfessionItem = (item) => {
+    if (!item || typeof item !== 'object') return null;
+    const contentText = typeof item.content === 'string' ? item.content : '';
+    const timeAgoText = item.timeAgo || item.timestamp || '';
+    const likes = typeof item.likesCount === 'number' ? item.likesCount : (typeof item.likes === 'number' ? item.likes : 0);
+
+    return (
     <View style={styles.confessionItem}>
       <View style={styles.confessionHeader}>
         <View style={styles.anonymousIcon}>
@@ -277,23 +283,24 @@ export default function ConfessionScreen() {
         <Text style={styles.anonymousLabel}>Anonim</Text>
       </View>
       <View style={styles.confessionContent}>
-        <Text style={styles.confessionText}>{item.content}</Text>
+        <Text style={styles.confessionText}>{contentText}</Text>
         <View style={styles.confessionFooter}>
           <View style={styles.timestampContainer}>
             <Ionicons name="time-outline" size={scale(12)} color={colors.text.tertiary} />
-            <Text style={styles.confessionTimestamp}>{item.timeAgo || item.timestamp}</Text>
+            <Text style={styles.confessionTimestamp}>{timeAgoText}</Text>
           </View>
           <TouchableOpacity 
             style={styles.likeButton}
             onPress={() => handleLikeConfession(item.id)}
           >
             <Ionicons name="heart-outline" size={scale(16)} color={colors.primary} />
-            <Text style={styles.likeCount}>{item.likesCount || item.likes || 0}</Text>
+            <Text style={styles.likeCount}>{likes}</Text>
           </TouchableOpacity>
         </View>
       </View>
     </View>
   );
+  };
 
   return (
     <SafeAreaView style={styles.container}>

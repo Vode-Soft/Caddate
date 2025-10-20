@@ -272,14 +272,14 @@ const styles = StyleSheet.create({
   resendButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.text.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
   },
   resendButtonText: {
-    color: colors.primary,
+    color: colors.text.primary,
     fontSize: scaleFont(16),
     fontWeight: '600',
   },

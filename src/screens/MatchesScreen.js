@@ -458,7 +458,7 @@ export default function MatchesScreen({ navigation }) {
         ]}
       >
         <LinearGradient
-          colors={['#FF6B9D', '#C239B3', '#8B5CF6']}
+          colors={colors.gradients.red}
           style={styles.matchAnimationGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -987,24 +987,24 @@ export default function MatchesScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <LinearGradient colors={colors.gradients.redBlack} style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={scale(24)} color={colors.text.primary} />
+          <Ionicons name="arrow-back" size={scale(24)} color={colors.text.light} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Eşleşmeler</Text>
+        <Text style={[styles.headerTitle, { color: colors.text.light }]}>Eşleşmeler</Text>
         <TouchableOpacity 
           style={styles.filterButton}
           onPress={() => setShowFilters(true)}
         >
-          <Ionicons name="options" size={scale(24)} color={colors.text.primary} />
+          <Ionicons name="options" size={scale(24)} color={colors.text.light} />
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Tab Bar */}
       {renderTabBar()}

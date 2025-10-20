@@ -18,7 +18,7 @@ export default function MenuTabComponent() {
         width: scale(80),
         height: scale(80),
         borderRadius: scale(40),
-        backgroundColor: colors.primary + '20',
+        backgroundColor: colors.primaryAlpha,
         marginBottom: verticalScale(20),
       }}>
         <Ionicons 
