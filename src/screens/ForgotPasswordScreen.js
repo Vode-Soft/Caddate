@@ -297,8 +297,8 @@ export default function ForgotPasswordScreen({ navigation }) {
                 styles.passwordStrengthFill,
                 {
                   width: `${Math.min((newPassword.length / 8) * 100, 100)}%`,
-                  backgroundColor: newPassword.length < 6 ? '#ff4444' :
-                                 newPassword.length < 8 ? '#ffaa00' : '#00aa44'
+                  backgroundColor: newPassword.length < 6 ? colors.warning :
+                                 newPassword.length < 8 ? colors.accent : colors.success
                 }
               ]} />
             </View>
@@ -327,7 +327,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   return (
     <LinearGradient
-      colors={[colors.primary, colors.secondary]}
+      colors={colors.gradients.redBlack}
       style={styles.container}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   submitButton: {
-    backgroundColor: colors.text.primary,
+    backgroundColor: colors.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.text.light,
   },
   backButton: {
     alignItems: 'center',

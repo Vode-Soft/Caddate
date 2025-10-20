@@ -509,7 +509,7 @@ export default function PhotoScreen() {
                 {item.profile_picture ? (
                   <Image source={{ uri: item.profile_picture }} style={styles.avatarImage} />
                 ) : (
-                  <Ionicons name="person" size={scale(16)} color="#FFFFFF" />
+                  <Ionicons name="person" size={scale(16)} color={colors.text.light} />
                 )}
               </View>
               <View style={styles.userDetails}>
@@ -521,7 +521,7 @@ export default function PhotoScreen() {
           
           <View style={styles.photoFooter}>
             <View style={styles.locationContainer}>
-              <Ionicons name="location" size={scale(14)} color="#FFFFFF" />
+              <Ionicons name="location" size={scale(14)} color={colors.text.light} />
               <Text style={styles.locationText} numberOfLines={1}>{item.location}</Text>
             </View>
             
@@ -534,7 +534,7 @@ export default function PhotoScreen() {
                 <Ionicons 
                   name={item.isLiked ? "heart" : "heart-outline"} 
                   size={scale(18)} 
-                  color={item.isLiked ? "#FF6B6B" : "#FFFFFF"} 
+                  color={item.isLiked ? colors.accent : colors.text.light} 
                 />
                 <Text style={[styles.actionText, item.isLiked && styles.likedText]}>
                   {item.likes || 0}
@@ -542,12 +542,12 @@ export default function PhotoScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-                <Ionicons name="chatbubble-outline" size={scale(18)} color="#FFFFFF" />
+              <Ionicons name="chatbubble-outline" size={scale(18)} color={colors.text.light} />
                 <Text style={styles.actionText}>{item.comments || 0}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-                <Ionicons name="share-outline" size={scale(18)} color="#FFFFFF" />
+              <Ionicons name="share-outline" size={scale(18)} color={colors.text.light} />
               </TouchableOpacity>
             </View>
           </View>
@@ -627,9 +627,9 @@ export default function PhotoScreen() {
           disabled={uploading}
         >
           {uploading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={colors.text.light} />
           ) : (
-            <Ionicons name="camera" size={scale(24)} color="#FFFFFF" />
+            <Ionicons name="camera" size={scale(24)} color={colors.text.light} />
           )}
         </TouchableOpacity>
 
@@ -653,11 +653,11 @@ export default function PhotoScreen() {
             <View style={styles.photoModalInfo}>
               <View style={styles.photoModalUserInfo}>
                 <View style={styles.photoModalAvatar}>
-                  {selectedPhoto.profile_picture ? (
-                    <Image source={{ uri: selectedPhoto.profile_picture }} style={styles.photoModalAvatarImage} />
-                  ) : (
-                    <Ionicons name="person" size={scale(20)} color="#FFFFFF" />
-                  )}
+                {selectedPhoto.profile_picture ? (
+                  <Image source={{ uri: selectedPhoto.profile_picture }} style={styles.photoModalAvatarImage} />
+                ) : (
+                  <Ionicons name="person" size={scale(20)} color={colors.text.light} />
+                )}
                 </View>
                 <View style={styles.photoModalUserDetails}>
                   <Text style={styles.photoModalUserName}>{selectedPhoto.user}</Text>
@@ -674,7 +674,7 @@ export default function PhotoScreen() {
                   <Ionicons 
                     name={selectedPhoto.isLiked ? "heart" : "heart-outline"} 
                     size={scale(20)} 
-                    color={selectedPhoto.isLiked ? "#FF6B6B" : "#FFFFFF"} 
+                    color={selectedPhoto.isLiked ? colors.accent : colors.text.light} 
                   />
                   <Text style={[styles.photoModalActionText, selectedPhoto.isLiked && styles.photoModalLikedText]}>
                     {selectedPhoto.likes || 0}
@@ -696,7 +696,7 @@ export default function PhotoScreen() {
                   <Ionicons 
                     name={showComments ? "chatbubble" : "chatbubble-outline"} 
                     size={scale(20)} 
-                    color={showComments ? "#4ECDC4" : "#FFFFFF"} 
+                    color={showComments ? colors.info : colors.text.light} 
                   />
                   <Text style={[
                     styles.photoModalActionText,
@@ -707,7 +707,7 @@ export default function PhotoScreen() {
                 </TouchableOpacity>
                 
                 <TouchableOpacity style={styles.photoModalActionButton}>
-                  <Ionicons name="share-outline" size={scale(20)} color="#FFFFFF" />
+                  <Ionicons name="share-outline" size={scale(20)} color={colors.text.light} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -720,7 +720,7 @@ export default function PhotoScreen() {
                     Yorumlar ({comments.length})
                   </Text>
                   <TouchableOpacity onPress={toggleComments}>
-                    <Ionicons name="close" size={scale(20)} color="#FFFFFF" />
+                  <Ionicons name="close" size={scale(20)} color={colors.text.light} />
                   </TouchableOpacity>
                 </View>
                 

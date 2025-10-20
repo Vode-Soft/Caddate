@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 12,
     borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: colors.primaryAlpha,
     shadowColor: colors.shadow.dark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -984,12 +984,12 @@ const styles = StyleSheet.create({
   },
   headerStatus: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.text.secondary,
     marginTop: 2,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.text.secondary,
   },
   headerSpacer: {
     width: 48,
@@ -1117,7 +1117,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   ownMessageTime: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.text.secondary,
     marginRight: 4,
   },
   

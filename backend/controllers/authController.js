@@ -353,13 +353,23 @@ const sendPasswordResetCode = async (req, res) => {
 
     await EmailVerification.create(verificationData);
 
-    // Email gönder
+    // Reset linki oluştur (frontend URL .env'den)
+    const appBaseUrl = process.env.FRONTEND_URL || process.env.PRODUCTION_FRONTEND_URL || 'https://caddate.app';
+    // Not: Mobilde deep link kullanmıyorsak, web sayfasına yönlendirir; kodu parametreyle geçiyoruz
+    const resetLink = `${appBaseUrl.replace(/\/$/, '')}/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(verification_code)}`;
+
+    // Email gönder (5 sn timeout ile, gecikse bile API hızlı dönsün)
+    const sendEmailPromise = emailService.sendPasswordResetCode(email, verification_code, user.first_name, resetLink);
+    const timeoutMs = 5000;
     try {
-      await emailService.sendPasswordResetCode(email, verification_code, user.first_name);
+      await Promise.race([
+        sendEmailPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`Email send timeout after ${timeoutMs}ms`)), timeoutMs))
+      ]);
       console.log(`Password reset code sent to ${email}: ${verification_code}`);
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      // Email gönderilemese bile kodu veritabanına kaydettik, kullanıcıya bilgi ver
+      console.error('Email sending failed or timed out:', emailError.message || emailError);
+      // Email gönderilemese bile kod veritabanında, kullanıcıya yine de başarı mesajı veriyoruz
     }
 
     res.json({

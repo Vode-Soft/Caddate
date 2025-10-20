@@ -122,7 +122,7 @@ export default function LoginScreen({ navigation, onAuthentication }) {
 
   return (
     <LinearGradient
-      colors={colors.gradients.primary}
+      colors={colors.gradients.redBlack}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   loginButton: {
-    backgroundColor: colors.text.primary,
+    backgroundColor: colors.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   loginButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.text.light,
   },
   forgotPassword: {
     alignItems: 'center',

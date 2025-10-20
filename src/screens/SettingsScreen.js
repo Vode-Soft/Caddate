@@ -506,7 +506,7 @@ export default function SettingsScreen({ navigation }) {
         >
           {/* Header */}
           <LinearGradient
-            colors={colors.gradients.primary}
+            colors={colors.gradients.redBlack}
             style={styles.header}
           >
             <View style={styles.headerContent}>
@@ -514,7 +514,7 @@ export default function SettingsScreen({ navigation }) {
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <Ionicons name="arrow-back" size={24} color={colors.text.light} />
               </TouchableOpacity>
               
                <Text style={styles.headerTitle}>Ayarlar</Text>

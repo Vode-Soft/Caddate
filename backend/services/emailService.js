@@ -4,23 +4,42 @@ class EmailService {
   constructor() {
     this.transporter = null;
     this.isConfigured = false;
+    this.lastConfig = null;
+    this.lastVerifyOk = null;
+    this.lastVerifyError = null;
   }
 
   // SMTP yapılandırması
   configure(config) {
     try {
-      this.transporter = nodemailer.createTransport({
+      // Varsayılan zaman aşımı ve debug ayarları
+      const connectionTimeout = parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS || config.connectionTimeout || 8000);
+      const greetingTimeout = parseInt(process.env.SMTP_GREETING_TIMEOUT_MS || config.greetingTimeout || 8000);
+      const socketTimeout = parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS || config.socketTimeout || 10000);
+      const enableDebug = (process.env.SMTP_DEBUG === 'true') || !!config.debug;
+
+      const transporterConfig = {
         host: config.host,
         port: config.port,
-        secure: config.secure || false, // true for 465, false for other ports
+        secure: !!config.secure, // true for 465, false for STARTTLS (587)
         auth: {
           user: config.user,
           pass: config.pass
         },
         tls: {
-          rejectUnauthorized: false // Self-signed certificate için
-        }
-      });
+          rejectUnauthorized: false, // Self-signed cert için
+          ciphers: 'TLSv1.2'
+        },
+        requireTLS: config.requireTLS === undefined ? (config.port === 587 && !config.secure) : !!config.requireTLS,
+        connectionTimeout,
+        greetingTimeout,
+        socketTimeout,
+        logger: enableDebug,
+        debug: enableDebug
+      };
+
+      this.transporter = nodemailer.createTransport(transporterConfig);
+      this.lastConfig = { ...transporterConfig };
 
       this.isConfigured = true;
       console.log('✅ Email servisi yapılandırıldı');
@@ -28,6 +47,58 @@ class EmailService {
       console.error('❌ Email servisi yapılandırılamadı:', error.message);
       this.isConfigured = false;
     }
+  }
+
+  // Mevcut transporter ile bağlantıyı doğrula, gerekirse alternatif ayarlarla yeniden dene
+  async verifyAndMaybeFallback() {
+    if (!this.transporter) {
+      this.lastVerifyOk = false;
+      this.lastVerifyError = new Error('Transporter yok');
+      return false;
+    }
+
+    const tryVerify = async () => {
+      try {
+        await this.transporter.verify();
+        this.lastVerifyOk = true;
+        this.lastVerifyError = null;
+        console.log('✅ SMTP verify başarılı');
+        return true;
+      } catch (err) {
+        this.lastVerifyOk = false;
+        this.lastVerifyError = err;
+        console.error('❌ SMTP verify hatası:', err.message);
+        return false;
+      }
+    };
+
+    // Önce mevcut ayarlarla dene
+    if (await tryVerify()) return true;
+
+    // ETIMEDOUT/ECONNECTION vb. ise bir kez fallback dene
+    const code = this.lastVerifyError?.code;
+    if ((code === 'ETIMEDOUT' || code === 'ECONNECTION' || code === 'EAUTH' || code === 'ESOCKET') && this.lastConfig) {
+      try {
+        console.log('🔁 SMTP verify için alternatif ayarlar deneniyor...');
+        const fallback = { ...this.lastConfig };
+        if (fallback.port === 587 && !fallback.secure) {
+          fallback.port = 465;
+          fallback.secure = true;
+          fallback.requireTLS = false;
+        } else {
+          fallback.port = 587;
+          fallback.secure = false;
+          fallback.requireTLS = true;
+        }
+        this.transporter = require('nodemailer').createTransport(fallback);
+        this.lastConfig = { ...fallback };
+        if (await tryVerify()) return true;
+      } catch (fallbackErr) {
+        console.error('❌ SMTP fallback verify hatası:', fallbackErr.message);
+      }
+    }
+
+    return false;
   }
 
   // Email gönderme
@@ -50,6 +121,38 @@ class EmailService {
       return result;
     } catch (error) {
       console.error('❌ Email gönderme hatası:', error.message);
+      // Zaman aşımı veya bağlantı hatasında bir kez alternatif ayarlarla yeniden dene
+      if ((error.code === 'ETIMEDOUT' || error.code === 'ECONNECTION') && this.lastConfig) {
+        try {
+          console.log('🔁 Alternatif SMTP ayarlarıyla yeniden deneniyor...');
+          const fallback = { ...this.lastConfig };
+          if (fallback.port === 587 && !fallback.secure) {
+            // 587 STARTTLS başarısızsa 465 SSL dene
+            fallback.port = 465;
+            fallback.secure = true;
+            fallback.requireTLS = false;
+          } else {
+            // 465 başarısızsa 587 STARTTLS dene
+            fallback.port = 587;
+            fallback.secure = false;
+            fallback.requireTLS = true;
+          }
+          this.transporter = nodemailer.createTransport(fallback);
+          this.lastConfig = { ...fallback };
+          const result = await this.transporter.sendMail({
+            from: process.env.SMTP_FROM || 'noreply@caddateapp.com',
+            to,
+            subject,
+            html,
+            text
+          });
+          console.log('✅ Retry başarılı, email gönderildi:', result.messageId);
+          return result;
+        } catch (retryError) {
+          console.error('❌ Retry de başarısız:', retryError.message);
+          throw error;
+        }
+      }
       throw error;
     }
   }
@@ -116,7 +219,7 @@ class EmailService {
   }
 
   // Şifre sıfırlama emaili gönder
-  async sendPasswordResetCode(email, code, userName) {
+  async sendPasswordResetCode(email, code, userName, resetLink) {
     const subject = 'CaddateApp - Şifre Sıfırlama Kodu';
     
     const html = `
@@ -144,6 +247,18 @@ class EmailService {
             <p>Şifrenizi sıfırlamak için aşağıdaki kodu kullanın:</p>
             <div class="code">${code}</div>
             <p><strong>Bu kod 10 dakika geçerlidir.</strong></p>
+            ${resetLink ? `
+            <p>Veya aşağıdaki butona tıklayarak şifre sıfırlama sayfasına gidebilirsiniz:</p>
+            <p style="text-align:center;">
+              <a href="${resetLink}"
+                 style="display:inline-block;background:#4ECDC4;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:bold;">
+                 Şifreyi Sıfırla
+              </a>
+            </p>
+            <p style="font-size:12px;color:#666;word-break:break-all;">
+              Bağlantı: ${resetLink}
+            </p>
+            ` : ''}
             <p>Eğer bu işlemi siz yapmadıysanız, bu emaili görmezden gelebilirsiniz.</p>
           </div>
           <div class="footer">
@@ -164,6 +279,8 @@ class EmailService {
       ${code}
       
       Bu kod 10 dakika geçerlidir.
+      
+      ${resetLink ? `Alternatif olarak bu bağlantıyı açabilirsiniz: ${resetLink}` : ''}
       
       Eğer bu işlemi siz yapmadıysanız, bu emaili görmezden gelebilirsiniz.
       

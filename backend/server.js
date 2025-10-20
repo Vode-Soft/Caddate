@@ -854,9 +854,20 @@ const startServer = async () => {
           port: parseInt(process.env.SMTP_PORT) || 587,
           secure: process.env.SMTP_SECURE === 'true',
           user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
+          pass: process.env.SMTP_PASS,
+          connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 8000,
+          greetingTimeout: parseInt(process.env.SMTP_GREETING_TIMEOUT_MS) || 8000,
+          socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS) || 10000,
+          debug: process.env.SMTP_DEBUG === 'true',
+          requireTLS: process.env.SMTP_REQUIRE_TLS === 'true'
         });
         console.log('✅ Email servisi başarıyla yapılandırıldı');
+        // SMTP bağlantısını baştan doğrula, sorun varsa logla (uygulama yine çalışır)
+        try {
+          await emailService.verifyAndMaybeFallback();
+        } catch (verifyErr) {
+          console.error('❌ SMTP verify çalıştırılamadı:', verifyErr.message);
+        }
       } catch (error) {
         console.error('❌ Email servisi yapılandırılamadı:', error.message);
       }

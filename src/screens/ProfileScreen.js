@@ -790,7 +790,7 @@ export default function ProfileScreen({ route, navigation }) {
         >
           {/* Header */}
           <LinearGradient
-            colors={colors.gradients.primary}
+            colors={colors.gradients.redBlack}
             style={styles.header}
           >
             <View style={styles.headerContent}>
@@ -801,7 +801,7 @@ export default function ProfileScreen({ route, navigation }) {
                 <Ionicons 
                   name={isEditing ? "close" : "create-outline"} 
                   size={24} 
-                  color="#FFFFFF" 
+                  color={colors.text.light} 
                 />
               </TouchableOpacity>
               
@@ -822,12 +822,12 @@ export default function ProfileScreen({ route, navigation }) {
                 />
                 {isEditing && (
                   <View style={styles.imageEditOverlay}>
-                    <Ionicons name="camera" size={24} color="#FFFFFF" />
+                    <Ionicons name="camera" size={24} color={colors.text.light} />
                   </View>
                 )}
                 {isUploading && (
                   <View style={styles.uploadingOverlay}>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <ActivityIndicator size="small" color={colors.text.light} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -836,7 +836,7 @@ export default function ProfileScreen({ route, navigation }) {
                 style={styles.settingsButton}
                 onPress={() => navigation.navigate('Settings')}
               >
-                <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="settings-outline" size={24} color={colors.text.light} />
               </TouchableOpacity>
             </View>
             
@@ -1073,7 +1073,7 @@ export default function ProfileScreen({ route, navigation }) {
                   onPress={handleSave}
                   disabled={isLoading}
                 >
-                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                  <Ionicons name="checkmark" size={20} color={colors.text.light} />
                   <Text style={styles.buttonText}>
                     {isLoading ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
                   </Text>
@@ -1097,7 +1097,7 @@ export default function ProfileScreen({ route, navigation }) {
               style={[styles.actionButton, styles.logoutButton]}
               onPress={handleLogout}
             >
-              <Ionicons name="log-out-outline" size={20} color="#FF6B6B" />
+              <Ionicons name="log-out-outline" size={20} color={colors.primary} />
               <Text style={styles.logoutText}>Çıkış Yap</Text>
             </TouchableOpacity>
 
@@ -1105,7 +1105,7 @@ export default function ProfileScreen({ route, navigation }) {
               style={[styles.actionButton, styles.deleteButton]}
               onPress={handleDeleteAccount}
             >
-              <Ionicons name="trash-outline" size={20} color="#FF4444" />
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
               <Text style={[styles.actionText, styles.deleteText]}>Hesabı Sil</Text>
                 </TouchableOpacity>
               </View>

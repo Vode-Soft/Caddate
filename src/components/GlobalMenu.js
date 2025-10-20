@@ -26,32 +26,32 @@ export default function GlobalMenu({ isVisible, onClose, onNavigate }) {
       id: '1',
       title: 'MATCHES',
       icon: 'heart',
-      color: '#FF3B87', // Pink color for matches
-      gradient: ['#FF3B87', '#FF6B9D'],
+      color: colors.primary,
+      gradient: colors.gradients.red,
       description: 'Eşleşmeler',
     },
     {
       id: '2',
       title: 'İTİRAF',
       icon: 'chatbubbles',
-      color: '#FF6B6B', // Red color for confession
-      gradient: ['#FF6B6B', '#FF8E8E'],
+      color: colors.primary,
+      gradient: colors.gradients.redBlack,
       description: 'Anonim itiraflar',
     },
     {
       id: '3',
       title: 'SUPPORT',
       icon: 'help-circle',
-      color: '#8B5CF6', // Purple color
-      gradient: ['#8B5CF6', '#A855F7'],
+      color: colors.secondary,
+      gradient: colors.gradients.darkRed,
       description: 'Yardım ve destek',
     },
     {
       id: '4',
       title: 'LOCAL CHAT',
       icon: 'chatbubble-ellipses',
-      color: '#10B981', // Green color
-      gradient: ['#10B981', '#34D399'],
+      color: colors.primary,
+      gradient: colors.gradients.blackRed,
       description: 'Anlık mesajlaşma',
     },
   ];

@@ -58,6 +58,26 @@ class ApiService {
     console.log('API Service initialized with URL:', this.baseURL);
   }
 
+  // Fetch için manuel timeout uygula (React Native fetch timeout parametresini desteklemez)
+  async fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      return response;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(`İstek zaman aşımına uğradı (${Math.floor(timeoutMs / 1000)} sn). Sunucu geç yanıt veriyor olabilir, lütfen tekrar deneyin.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   // Token'ı ayarla
   setToken(token) {
     this.token = token;
@@ -251,9 +271,9 @@ class ApiService {
 
     try {
       console.log('🌐 Making API request to:', url);
-      console.log('📋 Request config:', JSON.stringify(config, null, 2));
+      console.log('📋 Request config:', JSON.stringify({ ...config, signal: undefined }, null, 2));
       
-      const response = await fetch(url, config);
+      const response = await this.fetchWithTimeout(url, config, config.timeout || 30000);
       
       console.log('📡 Response status:', response.status);
       console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));

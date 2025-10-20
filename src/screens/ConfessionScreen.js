@@ -306,7 +306,7 @@ export default function ConfessionScreen() {
       >
         <View style={styles.headerContent}>
           <View style={styles.headerIconContainer}>
-            <Ionicons name="heart-circle-outline" size={scale(32)} color="#FFFFFF" />
+            <Ionicons name="heart-circle-outline" size={scale(32)} color={colors.text.light} />
           </View>
           <Text style={styles.headerTitle}>İtiraf</Text>
           <Text style={styles.headerSubtitle}>Anonim olarak paylaş</Text>
@@ -355,10 +355,10 @@ export default function ConfessionScreen() {
                 disabled={isSubmitting || !confession.trim() || confession.trim().length < 10}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color={colors.text.light} />
                 ) : (
                   <>
-                    <Ionicons name="send" size={scale(16)} color="#FFFFFF" style={{ marginRight: scale(5) }} />
+                    <Ionicons name="send" size={scale(16)} color={colors.text.light} style={{ marginRight: scale(5) }} />
                     <Text style={styles.submitButtonText}>Gönder</Text>
                   </>
                 )}
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerIconContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: colors.primaryAlpha,
     borderRadius: scale(25),
     padding: scale(8),
     marginBottom: verticalScale(10),
@@ -443,12 +443,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: scaleFont(28),
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: colors.text.light,
     marginBottom: verticalScale(5),
   },
   headerSubtitle: {
     fontSize: scaleFont(16),
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.text.secondary,
   },
   content: {
     flex: 1,
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: colors.text.light,
     fontSize: scaleFont(16),
     fontWeight: 'bold',
   },

@@ -88,21 +88,42 @@ function MainTabNavigator({ onLogout }) {
           }
 
           return (
-            <Ionicons 
-              name={iconName} 
-              size={focused ? scale(26) : scale(24)} 
-              color={color} 
-            />
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons 
+                name={iconName} 
+                size={focused ? scale(26) : scale(24)} 
+                color={color} 
+              />
+              {focused && (
+                <View style={{
+                  position: 'absolute',
+                  top: scale(-6),
+                  width: scale(6),
+                  height: scale(6),
+                  borderRadius: scale(3),
+                  backgroundColor: colors.primary + 'CC',
+                }} />
+              )}
+            </View>
           );
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.text.tertiary,
+        tabBarBackground: () => (
+          <LinearGradient
+            colors={[colors.button.primaryHover, colors.surface, colors.background]}
+            locations={[0, 0.7, 1]}
+            style={{ flex: 1 }}
+            start={{ x: 0.5, y: 1 }}
+            end={{ x: 0.5, y: 0.25 }}
+          />
+        ),
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: 'transparent',
           borderTopWidth: 0,
-          height: scale(70) + bottomSafeArea,
-          paddingBottom: bottomSafeArea + scale(8),
-          paddingTop: scale(8),
+          height: scale(62) + bottomSafeArea,
+          paddingBottom: bottomSafeArea + scale(6),
+          paddingTop: scale(6),
           paddingHorizontal: scale(16),
           shadowColor: colors.shadow.dark,
           shadowOffset: {
@@ -125,7 +146,7 @@ function MainTabNavigator({ onLogout }) {
           marginTop: scale(2),
         },
         tabBarItemStyle: {
-          paddingVertical: scale(4),
+          paddingVertical: scale(2),
         },
         headerShown: false,
       })}

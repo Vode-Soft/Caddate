@@ -989,7 +989,7 @@ export default function MapScreen() {
               provider={PROVIDER_APPLE}
               mapType={mapType}
               initialRegion={region}
-              showsUserLocation={true}
+              showsUserLocation={false}
               showsMyLocationButton={false}
               showsCompass={true}
               showsScale={true}

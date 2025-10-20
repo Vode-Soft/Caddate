@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   registerButton: {
-    backgroundColor: colors.text.primary,
+    backgroundColor: colors.primary,
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
   registerButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.text.light,
   },
   footer: {
     flexDirection: 'row',

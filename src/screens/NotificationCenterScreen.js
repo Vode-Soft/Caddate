@@ -480,7 +480,7 @@ export default function NotificationCenterScreen({ navigation }) {
   const renderHeader = () => (
     <View style={styles.header}>
       <LinearGradient
-        colors={[colors.primary, colors.secondary]}
+        colors={colors.gradients.redBlack}
         style={styles.headerGradient}
       >
         <View style={styles.headerContent}>
@@ -488,7 +488,7 @@ export default function NotificationCenterScreen({ navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={scale(24)} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={scale(24)} color={colors.text.light} />
           </TouchableOpacity>
           
           <View style={styles.headerText}>
@@ -505,14 +505,14 @@ export default function NotificationCenterScreen({ navigation }) {
               style={styles.testButton}
               onPress={sendTestNotification}
             >
-              <Ionicons name="notifications" size={scale(20)} color="#FFFFFF" />
+              <Ionicons name="notifications" size={scale(20)} color={colors.text.light} />
             </TouchableOpacity>
             
             <TouchableOpacity
               style={styles.filterButton}
               onPress={() => setShowFilterModal(true)}
             >
-              <Ionicons name="filter" size={scale(24)} color="#FFFFFF" />
+              <Ionicons name="filter" size={scale(24)} color={colors.text.light} />
             </TouchableOpacity>
           </View>
         </View>
@@ -523,7 +523,7 @@ export default function NotificationCenterScreen({ navigation }) {
             onPress={markAllAsRead}
             disabled={!stats || stats.unreadCount === 0}
           >
-            <Ionicons name="checkmark-done" size={scale(20)} color="#FFFFFF" />
+            <Ionicons name="checkmark-done" size={scale(20)} color={colors.text.light} />
             <Text style={styles.actionButtonText}>Tümünü Okundu İşaretle</Text>
           </TouchableOpacity>
           
@@ -531,7 +531,7 @@ export default function NotificationCenterScreen({ navigation }) {
             style={styles.actionButton}
             onPress={deleteReadNotifications}
           >
-            <Ionicons name="trash" size={scale(20)} color="#FFFFFF" />
+            <Ionicons name="trash" size={scale(20)} color={colors.text.light} />
             <Text style={styles.actionButtonText}>Okunmuşları Sil</Text>
           </TouchableOpacity>
         </View>
