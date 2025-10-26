@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { createNotification } = require('./notificationController');
+const antiSpamController = require('./antiSpamController');
 
 // Kullanıcıyı beğen (Like)
 const likeUser = async (req, res) => {
@@ -20,6 +21,18 @@ const likeUser = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Kendinizi beğenemezsiniz'
+      });
+    }
+
+    // Anti-spam kontrolü
+    const spamCheck = await antiSpamController.canLikeUser(userId, likedUserId);
+    if (!spamCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: spamCheck.reason,
+        waitTime: spamCheck.waitTime,
+        remaining: spamCheck.remaining,
+        spamScore: spamCheck.spamScore
       });
     }
 
@@ -336,22 +349,38 @@ const getSuggestedMatches = async (req, res) => {
 
     console.log('🎯 Eşleşme önerileri isteği:', { userId, maxDistance, minAge, maxAge, gender });
 
-    // Kullanıcının konumunu al
-    const userLocation = await pool.query(
-      'SELECT location_latitude, location_longitude, birth_date FROM users WHERE id = $1',
+    // Kullanıcının cinsiyetini kontrol et
+    const userInfo = await pool.query(
+      'SELECT gender, location_latitude, location_longitude, birth_date FROM users WHERE id = $1',
       [userId]
     );
 
-    if (userLocation.rows.length === 0) {
+    if (userInfo.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Kullanıcı bulunamadı'
       });
     }
 
-    const { location_latitude, location_longitude, birth_date } = userLocation.rows[0];
+    const { gender: userGender, location_latitude, location_longitude, birth_date } = userInfo.rows[0];
 
-    console.log('👤 User location:', { location_latitude, location_longitude });
+    console.log('👤 User info:', { userGender, location_latitude, location_longitude });
+
+    // Kız kullanıcılar için öncelikli eşleşme sistemi
+    if (userGender === 'female') {
+      const prioritizedMatches = await antiSpamController.getPrioritizedMatches(userId, parseInt(limit));
+      if (prioritizedMatches.success) {
+        return res.json({
+          success: true,
+          data: {
+            matches: prioritizedMatches.matches,
+            totalCount: prioritizedMatches.total,
+            hasMore: prioritizedMatches.matches.length === parseInt(limit),
+            isPrioritized: true
+          }
+        });
+      }
+    }
 
     // Daha basit ve güvenli bir sorgu - konum kontrolü olmadan
     const query = `

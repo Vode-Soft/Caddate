@@ -374,6 +374,66 @@ const { pool } = require('../config/database');
     }
   }
 
+  // İtiraf beğenenlerini getir
+  async getConfessionLikes(req, res) {
+    try {
+      const { confessionId } = req.params;
+
+      // İtirafın var olup olmadığını kontrol et
+      const confession = await pool.query(
+        'SELECT id FROM confessions WHERE id = $1',
+        [confessionId]
+      );
+
+      if (confession.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'İtiraf bulunamadı'
+        });
+      }
+
+      // Beğenenleri getir (anonim olarak)
+      const result = await pool.query(`
+        SELECT 
+          cl.created_at,
+          u.first_name,
+          u.last_name,
+          u.profile_picture,
+          u.age,
+          u.gender
+        FROM confession_likes cl
+        JOIN users u ON cl.user_id = u.id
+        WHERE cl.confession_id = $1
+        ORDER BY cl.created_at DESC
+      `, [confessionId]);
+
+      const likes = result.rows.map(row => ({
+        firstName: row.first_name,
+        lastName: row.last_name ? row.last_name.charAt(0) + '.' : '',
+        profilePicture: row.profile_picture,
+        age: row.age,
+        gender: row.gender,
+        likedAt: row.created_at,
+        timeAgo: getTimeAgo(row.created_at)
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          likes,
+          totalLikes: likes.length
+        }
+      });
+
+    } catch (error) {
+      console.error('Get confession likes error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Beğenenler yüklenirken bir hata oluştu'
+      });
+    }
+  }
+
   // İtiraf sil
   async deleteConfession(req, res) {
     try {

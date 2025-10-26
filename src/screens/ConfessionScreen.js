@@ -12,6 +12,9 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Dimensions,
+  Modal,
+  Image,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -37,6 +40,9 @@ export default function ConfessionScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confessions, setConfessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showLikesModal, setShowLikesModal] = useState(false);
+  const [confessionLikes, setConfessionLikes] = useState([]);
+  const [isLoadingLikes, setIsLoadingLikes] = useState(false);
 
   useEffect(() => {
     loadConfessions();
@@ -268,6 +274,39 @@ export default function ConfessionScreen() {
     }
   };
 
+  const handleShowLikes = async (confessionId) => {
+    try {
+      setIsLoadingLikes(true);
+      setShowLikesModal(true);
+      
+      // Token kontrolü
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        setShowLikesModal(false);
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      const response = await apiService.getConfessionLikes(confessionId);
+      console.log('👥 Confession likes response:', response);
+      
+      if (response && response.success) {
+        setConfessionLikes(response.data.likes || []);
+      } else {
+        Alert.alert('Hata', response?.message || 'Beğenenler yüklenemedi');
+        setShowLikesModal(false);
+      }
+    } catch (error) {
+      console.error('❌ Get confession likes error:', error);
+      Alert.alert('Hata', error.message || 'Beğenenler yüklenirken bir hata oluştu.');
+      setShowLikesModal(false);
+    } finally {
+      setIsLoadingLikes(false);
+    }
+  };
+
   const renderConfessionItem = (item) => {
     if (!item || typeof item !== 'object') return null;
     const contentText = typeof item.content === 'string' ? item.content : '';
@@ -281,6 +320,10 @@ export default function ConfessionScreen() {
           <Ionicons name="person-circle-outline" size={scale(20)} color={colors.text.tertiary} />
         </View>
         <Text style={styles.anonymousLabel}>Anonim</Text>
+        <View style={styles.confessionBadge}>
+          <Ionicons name="shield-checkmark-outline" size={scale(12)} color={colors.success} />
+          <Text style={styles.confessionBadgeText}>Güvenli</Text>
+        </View>
       </View>
       <View style={styles.confessionContent}>
         <Text style={styles.confessionText}>{contentText}</Text>
@@ -289,18 +332,54 @@ export default function ConfessionScreen() {
             <Ionicons name="time-outline" size={scale(12)} color={colors.text.tertiary} />
             <Text style={styles.confessionTimestamp}>{timeAgoText}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.likeButton}
-            onPress={() => handleLikeConfession(item.id)}
-          >
-            <Ionicons name="heart-outline" size={scale(16)} color={colors.primary} />
-            <Text style={styles.likeCount}>{likes}</Text>
-          </TouchableOpacity>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity 
+              style={styles.likeButton}
+              onPress={() => handleLikeConfession(item.id)}
+            >
+              <Ionicons name="heart-outline" size={scale(16)} color={colors.primary} />
+              <Text style={styles.likeCount}>{likes}</Text>
+            </TouchableOpacity>
+            {likes > 0 && (
+              <TouchableOpacity 
+                style={styles.likesViewButton}
+                onPress={() => handleShowLikes(item.id)}
+              >
+                <Ionicons name="people-outline" size={scale(14)} color={colors.text.secondary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </View>
   );
   };
+
+  const renderLikeItem = ({ item }) => (
+    <View style={styles.likeItem}>
+      <View style={styles.likeUserInfo}>
+        {item.profilePicture ? (
+          <Image source={{ uri: item.profilePicture }} style={styles.likeUserAvatar} />
+        ) : (
+          <View style={styles.likeUserAvatarPlaceholder}>
+            <Ionicons name="person" size={scale(20)} color={colors.text.tertiary} />
+          </View>
+        )}
+        <View style={styles.likeUserDetails}>
+          <Text style={styles.likeUserName}>
+            {item.firstName} {item.lastName}
+          </Text>
+          <View style={styles.likeUserMeta}>
+            <Text style={styles.likeUserAge}>{item.age} yaş</Text>
+            <Text style={styles.likeUserGender}>
+              {item.gender === 'male' ? 'Erkek' : item.gender === 'female' ? 'Kadın' : 'Belirtilmemiş'}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <Text style={styles.likeTime}>{item.timeAgo}</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -424,6 +503,49 @@ export default function ConfessionScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Beğenenler Modal */}
+      <Modal
+        visible={showLikesModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowLikesModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowLikesModal(false)}
+            >
+              <Ionicons name="close" size={scale(24)} color={colors.text.primary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Beğenenler</Text>
+            <View style={styles.modalHeaderSpacer} />
+          </View>
+
+          {isLoadingLikes ? (
+            <View style={styles.modalLoadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.modalLoadingText}>Beğenenler yükleniyor...</Text>
+            </View>
+          ) : confessionLikes.length === 0 ? (
+            <View style={styles.modalEmptyContainer}>
+              <Ionicons name="heart-outline" size={scale(60)} color={colors.text.tertiary} />
+              <Text style={styles.modalEmptyText}>Henüz beğenen yok</Text>
+              <Text style={styles.modalEmptySubtext}>İlk beğeneni sen ol!</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={confessionLikes}
+              renderItem={renderLikeItem}
+              keyExtractor={(item, index) => `${item.firstName}-${index}`}
+              style={styles.likesList}
+              contentContainerStyle={styles.likesListContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -624,6 +746,21 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     color: colors.text.secondary,
     fontWeight: '500',
+    flex: 1,
+  },
+  confessionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(12),
+  },
+  confessionBadgeText: {
+    fontSize: scaleFont(10),
+    color: colors.success,
+    fontWeight: '600',
+    marginLeft: scale(4),
   },
   confessionContent: {
     padding: getResponsivePadding(15),
@@ -648,6 +785,11 @@ const styles = StyleSheet.create({
     color: colors.text.tertiary,
     marginLeft: scale(5),
   },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -661,6 +803,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: scale(5),
     fontWeight: '600',
+  },
+  likesViewButton: {
+    backgroundColor: colors.text.tertiary + '20',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(12),
   },
   loadingContainer: {
     flex: 1,
@@ -723,5 +871,128 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: scale(8),
     fontWeight: '500',
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsivePadding(20),
+    paddingVertical: verticalScale(15),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  modalCloseButton: {
+    padding: scale(8),
+  },
+  modalTitle: {
+    fontSize: scaleFont(20),
+    fontWeight: 'bold',
+    color: colors.text.primary,
+  },
+  modalHeaderSpacer: {
+    width: scale(40),
+  },
+  modalLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: verticalScale(50),
+  },
+  modalLoadingText: {
+    fontSize: scaleFont(16),
+    color: colors.text.secondary,
+    marginTop: verticalScale(15),
+  },
+  modalEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: verticalScale(50),
+    paddingHorizontal: getResponsivePadding(40),
+  },
+  modalEmptyText: {
+    fontSize: scaleFont(18),
+    color: colors.text.secondary,
+    fontWeight: '600',
+    marginTop: verticalScale(20),
+    marginBottom: verticalScale(8),
+  },
+  modalEmptySubtext: {
+    fontSize: scaleFont(14),
+    color: colors.text.tertiary,
+  },
+  likesList: {
+    flex: 1,
+  },
+  likesListContent: {
+    padding: getResponsivePadding(20),
+  },
+  likeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    padding: getResponsivePadding(15),
+    borderRadius: scale(12),
+    marginBottom: verticalScale(10),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  likeUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  likeUserAvatar: {
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    marginRight: scale(12),
+  },
+  likeUserAvatarPlaceholder: {
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    backgroundColor: colors.text.tertiary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(12),
+  },
+  likeUserDetails: {
+    flex: 1,
+  },
+  likeUserName: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: verticalScale(2),
+  },
+  likeUserMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  likeUserAge: {
+    fontSize: scaleFont(12),
+    color: colors.text.secondary,
+  },
+  likeUserGender: {
+    fontSize: scaleFont(12),
+    color: colors.text.secondary,
+  },
+  likeTime: {
+    fontSize: scaleFont(12),
+    color: colors.text.tertiary,
   },
 });

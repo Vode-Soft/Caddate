@@ -7,7 +7,8 @@ const {
   likeConfession,
   unlikeConfession,
   getUserConfessions,
-  deleteConfession
+  deleteConfession,
+  getConfessionLikes
 } = require('../controllers/confessionController');
 
 // Tüm route'lar authentication gerektirir
@@ -27,6 +28,9 @@ router.post('/:confessionId/like', likeConfession);
 
 // İtiraf beğenisini geri al
 router.delete('/:confessionId/like', unlikeConfession);
+
+// İtiraf beğenenlerini getir
+router.get('/:confessionId/likes', getConfessionLikes);
 
 // İtiraf sil
 router.delete('/:confessionId', deleteConfession);

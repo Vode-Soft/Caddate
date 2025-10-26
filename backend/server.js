@@ -34,6 +34,9 @@ const confessionRoutes = require('./routes/confessions');
 const pushNotificationRoutes = require('./routes/pushNotifications');
 const friendSuggestionsRoutes = require('./routes/friendSuggestions');
 const analyticsRoutes = require('./routes/analytics');
+const antiSpamRoutes = require('./routes/antiSpam');
+const verificationRoutes = require('./routes/verification');
+const reportingRoutes = require('./routes/reporting');
 
 // Import models
 const Activity = require('./models/Activity');
@@ -746,6 +749,9 @@ app.use('/api/confessions', confessionRoutes);
 app.use('/api/push-notifications', pushNotificationRoutes);
 app.use('/api/friend-suggestions', friendSuggestionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/anti-spam', antiSpamRoutes);
+app.use('/api/verification', verificationRoutes);
+app.use('/api/reporting', reportingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -83,6 +83,20 @@ export default function ProfileScreen({ route, navigation }) {
   const [friends, setFriends] = useState([]);
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+  
+  // Araç bilgileri için state'ler
+  const [vehicles, setVehicles] = useState([]);
+  const [isLoadingVehicles, setIsLoadingVehicles] = useState(false);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [vehicleFormData, setVehicleFormData] = useState({
+    plate_number: '',
+    brand: '',
+    model: '',
+    additional_info: '',
+    photo: null
+  });
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
 
 
   const menuItems = [
@@ -129,6 +143,7 @@ export default function ProfileScreen({ route, navigation }) {
     loadUserStats();
     loadActivities();
     loadFriends();
+    loadVehicles();
 
     // Socket bağlantısını başlat
     socketService.connect();
@@ -692,6 +707,178 @@ export default function ProfileScreen({ route, navigation }) {
     }
   };
 
+  // Araç bilgilerini yükle
+  const loadVehicles = async () => {
+    try {
+      setIsLoadingVehicles(true);
+      
+      // Token'ı kontrol et
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        console.log('No token found for vehicles loading');
+        return;
+      }
+      
+      // Token'ı API servisine set et
+      apiService.setToken(token);
+      
+      const response = await apiService.getUserVehicles();
+      
+      if (response.success) {
+        setVehicles(response.data || []);
+      } else {
+        console.error('Failed to load vehicles:', response.message);
+      }
+    } catch (error) {
+      console.error('Vehicles load error:', error);
+    } finally {
+      setIsLoadingVehicles(false);
+    }
+  };
+
+  // Araç modal'ını aç
+  const openVehicleModal = (vehicle = null) => {
+    if (vehicle) {
+      setSelectedVehicle(vehicle);
+      setVehicleFormData({
+        plate_number: vehicle.plate_number || '',
+        brand: vehicle.brand || '',
+        model: vehicle.model || '',
+        additional_info: vehicle.additional_info || '',
+        photo: vehicle.photo_url || null
+      });
+    } else {
+      setSelectedVehicle(null);
+      setVehicleFormData({
+        plate_number: '',
+        brand: '',
+        model: '',
+        additional_info: '',
+        photo: null
+      });
+    }
+    setShowVehicleModal(true);
+  };
+
+  // Araç fotoğrafı seçici
+  const handleVehiclePhotoPicker = () => {
+    Alert.alert(
+      'Araç Fotoğrafı',
+      'Fotoğraf seçme yöntemini seçin',
+      [
+        {
+          text: 'Galeri',
+          onPress: () => pickVehicleImageFromGallery(),
+        },
+        {
+          text: 'Kamera',
+          onPress: () => takeVehiclePhoto(),
+        },
+        {
+          text: 'İptal',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  // Galeriden araç fotoğrafı seç
+  const pickVehicleImageFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // Seçilen fotoğrafı form verilerine ekle
+        setVehicleFormData(prev => ({
+          ...prev,
+          photo: result.assets[0].uri
+        }));
+      }
+    } catch (error) {
+      console.error('Vehicle image picker error:', error);
+      Alert.alert('Hata', 'Fotoğraf seçilirken bir hata oluştu');
+    }
+  };
+
+  // Kamera ile araç fotoğrafı çek
+  const takeVehiclePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // Çekilen fotoğrafı form verilerine ekle
+        setVehicleFormData(prev => ({
+          ...prev,
+          photo: result.assets[0].uri
+        }));
+      }
+    } catch (error) {
+      console.error('Vehicle camera error:', error);
+      Alert.alert('Hata', 'Fotoğraf çekilirken bir hata oluştu');
+    }
+  };
+
+  // Araç kaydetme fonksiyonu
+  const saveVehicle = async () => {
+    try {
+      setIsSavingVehicle(true);
+
+      // Form doğrulama
+      if (!vehicleFormData.plate_number.trim() || !vehicleFormData.brand.trim() || !vehicleFormData.model.trim()) {
+        Alert.alert('Hata', 'Plaka, marka ve model alanları zorunludur');
+        return;
+      }
+
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+
+      apiService.setToken(token);
+
+      let response;
+      if (selectedVehicle) {
+        // Güncelleme
+        response = await apiService.updateVehicle(selectedVehicle.id, vehicleFormData);
+      } else {
+        // Yeni ekleme
+        response = await apiService.addVehicle(vehicleFormData);
+      }
+
+      if (response.success) {
+        Alert.alert('Başarılı', selectedVehicle ? 'Araç güncellendi' : 'Araç eklendi');
+        setShowVehicleModal(false);
+        setSelectedVehicle(null);
+        setVehicleFormData({
+          plate_number: '',
+          brand: '',
+          model: '',
+          additional_info: '',
+          photo: null
+        });
+        // Araç listesini yenile
+        loadVehicles();
+      } else {
+        Alert.alert('Hata', response.message || 'Araç kaydedilirken bir hata oluştu');
+      }
+    } catch (error) {
+      console.error('Vehicle save error:', error);
+      Alert.alert('Hata', error.message || 'Araç kaydedilirken bir hata oluştu');
+    } finally {
+      setIsSavingVehicle(false);
+    }
+  };
+
   // Arkadaş çıkar
   const removeFriend = async (friendId, friendName) => {
     Alert.alert(
@@ -856,6 +1043,128 @@ export default function ProfileScreen({ route, navigation }) {
             {stats.map(renderStat)}
           </View>
 
+
+          {/* Araç Bilgileri - Modern Tasarım */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <View style={styles.sectionIconContainer}>
+                  <Ionicons name="car-sport" size={24} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.sectionTitle}>Araç Bilgileri</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    {vehicles.length > 0 ? `${vehicles.length} araç` : 'Araç ekleyin'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.addVehicleButton}
+                onPress={() => openVehicleModal()}
+              >
+                <Ionicons name="add-circle" size={24} color={colors.primary} />
+                <Text style={styles.addVehicleText}>Ekle</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {isLoadingVehicles ? (
+              <View style={styles.vehicleLoadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.vehicleLoadingText}>Araçlar yükleniyor...</Text>
+              </View>
+            ) : vehicles.length > 0 ? (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.vehicleScrollContainer}
+                contentContainerStyle={styles.vehicleScrollContent}
+              >
+                {vehicles.map((vehicle, index) => (
+                  <View 
+                    key={vehicle.id || index} 
+                    style={[
+                      styles.vehicleCard,
+                      index === vehicles.length - 1 && styles.lastVehicleCard
+                    ]}
+                  >
+                    {/* Araç Fotoğrafı */}
+                    <View style={styles.vehicleImageContainer}>
+                      {vehicle.photo_url ? (
+                        <Image
+                          source={{ uri: vehicle.photo_url }}
+                          style={styles.vehicleImage}
+                        />
+                      ) : (
+                        <View style={styles.vehicleImagePlaceholder}>
+                          <Ionicons name="car" size={32} color={colors.text.tertiary} />
+                        </View>
+                      )}
+                      {vehicle.is_primary && (
+                        <View style={styles.primaryVehicleBadge}>
+                          <Ionicons name="star" size={12} color={colors.text.light} />
+                        </View>
+                      )}
+                    </View>
+                    
+                    {/* Araç Bilgileri */}
+                    <View style={styles.vehicleCardContent}>
+                      <View style={styles.vehicleCardHeader}>
+                        <Text style={styles.vehicleBrandModel}>
+                          {vehicle.brand} {vehicle.model}
+                        </Text>
+                        <TouchableOpacity 
+                          style={styles.vehicleEditButton}
+                          onPress={() => openVehicleModal(vehicle)}
+                        >
+                          <Ionicons name="create-outline" size={16} color={colors.text.secondary} />
+                        </TouchableOpacity>
+                      </View>
+                      
+                      <View style={styles.vehiclePlateContainer}>
+                        <Ionicons name="shield-checkmark" size={14} color={colors.primary} />
+                        <Text style={styles.vehiclePlate}>{vehicle.plate_number}</Text>
+                      </View>
+                      
+                      {vehicle.additional_info && (
+                        <Text style={styles.vehicleAdditionalInfo} numberOfLines={2}>
+                          {vehicle.additional_info}
+                        </Text>
+                      )}
+                      
+                      <View style={styles.vehicleCardFooter}>
+                        <View style={styles.vehicleStatusContainer}>
+                          <View style={styles.vehicleStatusDot} />
+                          <Text style={styles.vehicleStatusText}>Aktif</Text>
+                        </View>
+                        {vehicle.is_primary && (
+                          <View style={styles.primaryLabel}>
+                            <Text style={styles.primaryLabelText}>Ana Araç</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.noVehicleContainer}>
+                <View style={styles.noVehicleIconContainer}>
+                  <Ionicons name="car-outline" size={48} color={colors.text.tertiary} />
+                </View>
+                <Text style={styles.noVehicleText}>Henüz araç eklenmemiş</Text>
+                <Text style={styles.noVehicleSubtext}>
+                  Araç bilgilerinizi ekleyerek arkadaşlarınızla paylaşın
+                </Text>
+                <TouchableOpacity 
+                  style={styles.addFirstVehicleButton}
+                  onPress={() => openVehicleModal()}
+                >
+                  <Ionicons name="add-circle" size={20} color={colors.text.light} />
+                  <Text style={styles.addFirstVehicleText}>İlk Aracını Ekle</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
 
           {/* Recent Activity */}
           <View style={styles.section}>
@@ -1271,6 +1580,154 @@ export default function ProfileScreen({ route, navigation }) {
                   <Text style={styles.noFriendsSubtext}>Yeni arkadaşlar ekleyerek sosyal ağınızı genişletin</Text>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Araç Modal */}
+        <Modal
+          visible={showVehicleModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowVehicleModal(false);
+            setSelectedVehicle(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.vehicleModalContent}>
+              <View style={styles.vehicleModalHeader}>
+                <Text style={styles.vehicleModalTitle}>
+                  {selectedVehicle ? 'Araç Düzenle' : 'Yeni Araç Ekle'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    setShowVehicleModal(false);
+                    setSelectedVehicle(null);
+                  }}
+                >
+                  <Ionicons name="close" size={24} color={colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.vehicleForm}>
+                {/* Araç Fotoğrafı */}
+                <View style={styles.vehiclePhotoSection}>
+                  <Text style={styles.inputLabel}>Araç Fotoğrafı</Text>
+                  <TouchableOpacity 
+                    style={styles.vehiclePhotoContainer}
+                    onPress={() => handleVehiclePhotoPicker()}
+                  >
+                    {vehicleFormData.photo ? (
+                      <Image
+                        source={{ uri: vehicleFormData.photo }}
+                        style={styles.vehiclePhotoPreview}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.vehiclePhotoPlaceholder}>
+                        <Ionicons name="camera" size={32} color={colors.text.tertiary} />
+                        <Text style={styles.vehiclePhotoText}>Fotoğraf Ekle</Text>
+                      </View>
+                    )}
+                    <View style={styles.vehiclePhotoOverlay}>
+                      <Ionicons name="camera" size={20} color={colors.text.light} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Plaka *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="34 ABC 123"
+                    value={vehicleFormData.plate_number}
+                    onChangeText={(text) => setVehicleFormData(prev => ({...prev, plate_number: text}))}
+                    placeholderTextColor={colors.text.tertiary}
+                  />
+                </View>
+                
+                <View style={styles.inputRow}>
+                  <View style={[styles.inputGroup, styles.halfWidth]}>
+                    <Text style={styles.inputLabel}>Marka *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="BMW"
+                      value={vehicleFormData.brand}
+                      onChangeText={(text) => setVehicleFormData(prev => ({...prev, brand: text}))}
+                      placeholderTextColor={colors.text.tertiary}
+                    />
+                  </View>
+                  
+                  <View style={[styles.inputGroup, styles.halfWidth]}>
+                    <Text style={styles.inputLabel}>Model *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="3.20i"
+                      value={vehicleFormData.model}
+                      onChangeText={(text) => setVehicleFormData(prev => ({...prev, model: text}))}
+                      placeholderTextColor={colors.text.tertiary}
+                    />
+                  </View>
+                </View>
+                
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Ek Bilgiler</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder="Renk, yıl, özel özellikler..."
+                    value={vehicleFormData.additional_info}
+                    onChangeText={(text) => setVehicleFormData(prev => ({...prev, additional_info: text}))}
+                    placeholderTextColor={colors.text.tertiary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+                
+                <View style={styles.vehicleActions}>
+                  <TouchableOpacity
+                    style={[styles.saveButton, isSavingVehicle && styles.saveButtonDisabled]}
+                    onPress={saveVehicle}
+                    disabled={isSavingVehicle}
+                  >
+                    {isSavingVehicle ? (
+                      <ActivityIndicator size="small" color={colors.text.light} />
+                    ) : (
+                      <Text style={styles.saveButtonText}>
+                        {selectedVehicle ? 'Güncelle' : 'Kaydet'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  
+                  {selectedVehicle && (
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Araç Sil',
+                          'Bu aracı silmek istediğinizden emin misiniz?',
+                          [
+                            { text: 'İptal', style: 'cancel' },
+                            { 
+                              text: 'Sil', 
+                              style: 'destructive',
+                              onPress: () => {
+                                // Araç silme işlemi
+                                setShowVehicleModal(false);
+                                setSelectedVehicle(null);
+                              }
+                            }
+                          ]
+                        );
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={colors.warning} />
+                      <Text style={styles.deleteButtonText}>Sil</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -2032,5 +2489,448 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: scaleFont(20),
+  },
+  
+  // Araç Bölümü Stilleri - Modern Tasarım
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(20),
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sectionIconContainer: {
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
+    backgroundColor: colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(15),
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sectionSubtitle: {
+    fontSize: scaleFont(12),
+    color: colors.text.secondary,
+    marginTop: verticalScale(2),
+    fontWeight: '500',
+  },
+  addVehicleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '15',
+    paddingHorizontal: getResponsivePadding(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(20),
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  addVehicleText: {
+    fontSize: scaleFont(12),
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: scale(4),
+  },
+  // Tam Dikdörtgen Araç Kartı Tasarımı
+  vehicleScrollContainer: {
+    marginHorizontal: -getResponsivePadding(10),
+  },
+  vehicleScrollContent: {
+    paddingLeft: getResponsivePadding(20),
+    paddingRight: getResponsivePadding(20),
+    paddingVertical: verticalScale(5),
+  },
+  vehicleCard: {
+    width: scale(340),
+    backgroundColor: colors.surface,
+    borderRadius: scale(12),
+    marginRight: scale(12),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: colors.border.light + '20',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  lastVehicleCard: {
+    marginRight: scale(20),
+  },
+  vehicleImageContainer: {
+    width: '100%',
+    height: verticalScale(200),
+    backgroundColor: colors.background.secondary,
+    overflow: 'hidden',
+  },
+  vehicleImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  vehicleImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  primaryVehicleBadge: {
+    position: 'absolute',
+    top: scale(10),
+    right: scale(10),
+    width: scale(24),
+    height: scale(24),
+    borderRadius: scale(12),
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vehicleCardContent: {
+    padding: getResponsivePadding(12),
+    flex: 1,
+  },
+  vehicleCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(6),
+  },
+  vehicleBrandModel: {
+    fontSize: scaleFont(16),
+    fontWeight: '700',
+    color: colors.text.primary,
+    flex: 1,
+  },
+  vehicleEditButton: {
+    padding: scale(4),
+    borderRadius: scale(6),
+    backgroundColor: colors.background.secondary,
+  },
+  vehiclePlateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: verticalScale(6),
+  },
+  vehiclePlate: {
+    fontSize: scaleFont(12),
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: scale(4),
+    letterSpacing: 0.5,
+  },
+  vehicleAdditionalInfo: {
+    fontSize: scaleFont(10),
+    color: colors.text.secondary,
+    lineHeight: scaleFont(14),
+    marginBottom: verticalScale(8),
+  },
+  vehicleCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  vehicleStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  vehicleStatusDot: {
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
+    backgroundColor: colors.success,
+    marginRight: scale(4),
+  },
+  vehicleStatusText: {
+    fontSize: scaleFont(10),
+    fontWeight: '600',
+    color: colors.success,
+  },
+  primaryLabel: {
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: scale(6),
+  },
+  primaryLabelText: {
+    fontSize: scaleFont(9),
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  vehicleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  vehicleIconContainer: {
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(12),
+  },
+  vehicleInfo: {
+    flex: 1,
+  },
+  vehicleBrandModel: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: verticalScale(2),
+  },
+  vehiclePlate: {
+    fontSize: scaleFont(14),
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+  primaryBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(8),
+    marginTop: verticalScale(4),
+    alignSelf: 'flex-start',
+  },
+  primaryText: {
+    fontSize: scaleFont(10),
+    fontWeight: '700',
+    color: colors.text.light,
+  },
+  vehicleActionButton: {
+    padding: scale(8),
+    borderRadius: scale(8),
+    backgroundColor: colors.surface,
+  },
+  vehicleAdditionalInfo: {
+    fontSize: scaleFont(12),
+    color: colors.text.secondary,
+    marginTop: verticalScale(8),
+    fontStyle: 'italic',
+  },
+  // Yükleme Durumu
+  vehicleLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: verticalScale(40),
+    backgroundColor: colors.surface,
+    borderRadius: scale(20),
+    marginHorizontal: getResponsivePadding(20),
+  },
+  vehicleLoadingText: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+    marginTop: verticalScale(10),
+    fontWeight: '500',
+  },
+  
+  // Boş Durum
+  noVehicleContainer: {
+    alignItems: 'center',
+    paddingVertical: verticalScale(40),
+    backgroundColor: colors.surface,
+    borderRadius: scale(20),
+    marginHorizontal: getResponsivePadding(20),
+    borderWidth: 2,
+    borderColor: colors.border.light + '30',
+    borderStyle: 'dashed',
+  },
+  noVehicleIconContainer: {
+    width: scale(80),
+    height: scale(80),
+    borderRadius: scale(40),
+    backgroundColor: colors.background.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: verticalScale(20),
+  },
+  noVehicleText: {
+    fontSize: scaleFont(18),
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: verticalScale(8),
+    textAlign: 'center',
+  },
+  noVehicleSubtext: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: scaleFont(20),
+    marginBottom: verticalScale(20),
+    paddingHorizontal: getResponsivePadding(20),
+  },
+  addFirstVehicleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: getResponsivePadding(20),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(25),
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  addFirstVehicleText: {
+    fontSize: scaleFont(14),
+    fontWeight: '700',
+    color: colors.text.light,
+    marginLeft: scale(6),
+  },
+  
+  // Araç Modal Stilleri
+  vehicleModalContent: {
+    backgroundColor: colors.background,
+    borderRadius: scale(20),
+    margin: getResponsivePadding(20),
+    maxHeight: '80%',
+    shadowColor: colors.shadow.dark,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  vehicleModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsivePadding(20),
+    paddingVertical: verticalScale(15),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  vehicleModalTitle: {
+    fontSize: scaleFont(18),
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  vehicleForm: {
+    paddingHorizontal: getResponsivePadding(20),
+    paddingVertical: verticalScale(15),
+  },
+  inputLabel: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: verticalScale(8),
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: scale(12),
+    paddingHorizontal: getResponsivePadding(15),
+    paddingVertical: verticalScale(12),
+    fontSize: scaleFont(16),
+    backgroundColor: colors.surface,
+    color: colors.text.primary,
+    marginBottom: verticalScale(15),
+  },
+  textArea: {
+    height: verticalScale(80),
+    textAlignVertical: 'top',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  halfWidth: {
+    width: '48%',
+  },
+  vehicleActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: verticalScale(20),
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(12),
+    alignItems: 'center',
+    marginRight: scale(10),
+  },
+  saveButtonText: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: colors.text.light,
+  },
+  saveButtonDisabled: {
+    backgroundColor: colors.text.tertiary,
+    opacity: 0.6,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning + '20',
+    paddingHorizontal: getResponsivePadding(15),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(12),
+  },
+  deleteButtonText: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: colors.warning,
+    marginLeft: scale(5),
+  },
+  
+  // Araç Fotoğrafı Stilleri
+  vehiclePhotoSection: {
+    marginBottom: verticalScale(20),
+  },
+  vehiclePhotoContainer: {
+    position: 'relative',
+    height: verticalScale(120),
+    borderRadius: scale(15),
+    backgroundColor: colors.background.secondary,
+    borderWidth: 2,
+    borderColor: colors.border.light,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  vehiclePhotoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  vehiclePhotoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehiclePhotoText: {
+    fontSize: scaleFont(14),
+    color: colors.text.tertiary,
+    marginTop: verticalScale(8),
+    fontWeight: '500',
+  },
+  vehiclePhotoOverlay: {
+    position: 'absolute',
+    bottom: scale(8),
+    right: scale(8),
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(16),
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.shadow.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

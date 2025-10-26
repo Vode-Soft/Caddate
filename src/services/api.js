@@ -1008,6 +1008,12 @@ class ApiService {
     return this.delete(`/confessions/${confessionId}/like`);
   }
 
+  // İtiraf beğenenlerini getir
+  async getConfessionLikes(confessionId) {
+    console.log('API: Getting confession likes:', confessionId);
+    return this.get(`/confessions/${confessionId}/likes`);
+  }
+
   // İtiraf sil
   async deleteConfession(confessionId) {
     console.log('API: Deleting confession:', confessionId);
