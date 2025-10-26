@@ -509,17 +509,20 @@ export default function MapScreen() {
   const startLocationTracking = useCallback(() => {
     if (isTrackingLocation || locationIntervalRef.current) return;
     
+    console.log('📍 Starting location tracking...');
     setIsTrackingLocation(true);
     
-    // Her 500ms'de bir konum güncelle - anlık takip
+    // Her 200ms'de bir konum güncelle - çok anlık takip
     locationIntervalRef.current = setInterval(async () => {
       if (isLocationSharing && locationPermission) {
         try {
           const location = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Highest,
-            maximumAge: 500, // 500ms - çok güncel veri
-            timeout: 1000,   // 1000ms timeout - hızlı
+            maximumAge: 100, // 100ms - çok güncel veri
+            timeout: 500,    // 500ms timeout - çok hızlı
           });
+          
+          console.log('📍 Location updated in real-time:', location.coords.latitude.toFixed(6), location.coords.longitude.toFixed(6));
           
           // Önceki konum bilgilerini güncelle (önce ref'lere, sonra state'e)
           const nowTime = new Date().getTime();
@@ -540,20 +543,6 @@ export default function MapScreen() {
           setLocationAccuracy(location.coords.accuracy);
           setLastLocationUpdate(new Date());
           
-          // Konum güncellendiğinde haritayı otomatik merkezle (sadece etkinse)
-          if (mapRef.current && autoCenterEnabled) {
-            try {
-              mapRef.current.animateToRegion({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }, 500); // 500ms'de yumuşak geçiş
-            } catch (error) {
-              console.error('Auto center error:', error);
-            }
-          }
-          
           await shareLocationWithServer(location.coords);
         } catch (error) {
           console.error('Location tracking error:', error);
@@ -561,9 +550,9 @@ export default function MapScreen() {
           if (error.code === 'E_LOCATION_SERVICES_DISABLED') {
             stopLocationTracking();
           }
+                  }
         }
-      }
-        }, 500); // 500ms'de bir güncelle - anlık
+          }, 200); // 200ms'de bir güncelle - çok anlık
   }, [isLocationSharing, locationPermission, isTrackingLocation, shareLocationWithServer, calculateSpeed]);
 
   const stopLocationTracking = useCallback(() => {
