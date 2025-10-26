@@ -56,6 +56,10 @@ export default function MapScreen() {
   const [lastLocationTime, setLastLocationTime] = useState(null);
   const [autoCenterEnabled, setAutoCenterEnabled] = useState(true); // Otomatik merkezleme kontrolü
   
+  // Ref'ler - state güncellemelerinin gecikmesini önlemek için
+  const lastLocationRef = useRef(null);
+  const lastLocationTimeRef = useRef(null);
+  
   // Animasyon değerleri
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -469,9 +473,12 @@ export default function MapScreen() {
       setLocationAccuracy(location.coords.accuracy);
       setLastLocationUpdate(new Date());
       
-      // İlk konum için lastLocation ve lastLocationTime'ı set et
+      // İlk konum için lastLocation ve lastLocationTime'ı set et (hem state hem ref)
+      const nowTime = new Date().getTime();
       setLastLocation(location);
-      setLastLocationTime(new Date().getTime());
+      setLastLocationTime(nowTime);
+      lastLocationRef.current = location;
+      lastLocationTimeRef.current = nowTime;
       
       // İlk konum alındığında haritayı otomatik merkezle
       if (mapRef.current) {
@@ -514,13 +521,19 @@ export default function MapScreen() {
             timeout: 1000,   // 1000ms timeout - hızlı
           });
           
-          // Hız hesapla (önceki konum ile)
+          // Önceki konum bilgilerini güncelle (önce ref'lere, sonra state'e)
+          const nowTime = new Date().getTime();
+          lastLocationRef.current = location;
+          lastLocationTimeRef.current = nowTime;
+          
+          // Hız hesapla (önceki konum ile - ref'ler güncel)
           const speed = calculateSpeed(location.coords);
           setCurrentSpeed(speed);
+          currentSpeedRef.current = speed;
           
-          // Önceki konum bilgilerini güncelle
+          // State'i güncelle
           setLastLocation(location);
-          setLastLocationTime(new Date().getTime());
+          setLastLocationTime(nowTime);
           
           // State güncellemelerini batch'le
           setLocation(location.coords);
@@ -551,7 +564,7 @@ export default function MapScreen() {
         }
       }
         }, 500); // 500ms'de bir güncelle - anlık
-  }, [isLocationSharing, locationPermission, isTrackingLocation, shareLocationWithServer]);
+  }, [isLocationSharing, locationPermission, isTrackingLocation, shareLocationWithServer, calculateSpeed]);
 
   const stopLocationTracking = useCallback(() => {
     if (locationIntervalRef.current) {
@@ -839,41 +852,62 @@ export default function MapScreen() {
     }
   };
 
+  // currentSpeed için ref ekle
+  const currentSpeedRef = useRef(0);
+  
   // Hız hesaplama fonksiyonu - düzeltildi
-  const calculateSpeed = (newLocation) => {
+  const calculateSpeed = useCallback((newLocation) => {
     try {
+      // Ref'lerden güncel değerleri al
+      const currentLastLocation = lastLocationRef.current;
+      const currentLastLocationTime = lastLocationTimeRef.current;
+      const currentSpeedValue = currentSpeedRef.current;
+      
       // Gerekli verilerin varlığını kontrol et
-      if (!newLocation || !lastLocation || !lastLocationTime) {
-        console.log('Speed calculation: Missing required data');
-        return currentSpeed || 0; // Önceki hızı koru
+      if (!newLocation || !currentLastLocation || !currentLastLocationTime) {
+        console.log('Speed calculation: Missing required data', {
+          hasNewLocation: !!newLocation,
+          hasLastLocation: !!currentLastLocation,
+          hasLastLocationTime: !!currentLastLocationTime
+        });
+        return currentSpeedValue || 0; // Önceki hızı koru
       }
 
+      // lastLocation yapısını kontrol et - Location objesi veya coords objesi olabilir
+      const lastLatitude = currentLastLocation.coords?.latitude || currentLastLocation.latitude;
+      const lastLongitude = currentLastLocation.coords?.longitude || currentLastLocation.longitude;
+      
       // Koordinatların geçerli olduğunu kontrol et
       if (!newLocation.latitude || !newLocation.longitude || 
-          !lastLocation.latitude || !lastLocation.longitude ||
+          !lastLatitude || !lastLongitude ||
           isNaN(newLocation.latitude) || isNaN(newLocation.longitude) ||
-          isNaN(lastLocation.latitude) || isNaN(lastLocation.longitude)) {
-        console.log('Speed calculation: Invalid coordinates');
-        return currentSpeed || 0; // Önceki hızı koru
+          isNaN(lastLatitude) || isNaN(lastLongitude)) {
+        console.log('Speed calculation: Invalid coordinates', {
+          newLat: newLocation.latitude,
+          newLng: newLocation.longitude,
+          lastLat: lastLatitude,
+          lastLng: lastLongitude
+        });
+        return currentSpeedValue || 0; // Önceki hızı koru
       }
 
       const now = new Date().getTime();
-      const timeDiff = (now - lastLocationTime) / 1000; // saniye cinsinden
+      const timeDiff = (now - currentLastLocationTime) / 1000; // saniye cinsinden
 
       // Zaman farkının geçerli olduğunu kontrol et
       if (timeDiff <= 0 || timeDiff > 10) { // 10 saniyeden fazla geçmişse geçersiz
         console.log('Speed calculation: Invalid time difference:', timeDiff);
-        return currentSpeed || 0; // Önceki hızı koru
+        return currentSpeedValue || 0; // Önceki hızı koru
       }
 
       // Çok kısa süre için hız hesaplama
       if (timeDiff < 0.2) {
-        return currentSpeed || 0; // Çok hızlı güncelleme, önceki hızı koru
+        return currentSpeedValue || 0; // Çok hızlı güncelleme, önceki hızı koru
       }
 
       const distance = calculateDistance(
-        lastLocation.latitude,
-        lastLocation.longitude,
+        lastLatitude,
+        lastLongitude,
         newLocation.latitude,
         newLocation.longitude
       );
@@ -881,7 +915,7 @@ export default function MapScreen() {
       // Mesafenin geçerli olduğunu kontrol et
       if (isNaN(distance) || distance < 0) {
         console.log('Speed calculation: Invalid distance:', distance);
-        return currentSpeed || 0; // Önceki hızı koru
+        return currentSpeedValue || 0; // Önceki hızı koru
       }
 
       // Çok küçük mesafe için hız 0
@@ -895,7 +929,7 @@ export default function MapScreen() {
       // Hızın geçerli olduğunu kontrol et
       if (isNaN(speedKmh) || speedKmh < 0) {
         console.log('Speed calculation: Invalid speed:', speedKmh);
-        return currentSpeed || 0; // Önceki hızı koru
+        return currentSpeedValue || 0; // Önceki hızı koru
       }
 
       // Maksimum hız sınırı (200 km/h)
@@ -905,9 +939,9 @@ export default function MapScreen() {
       return finalSpeed;
     } catch (error) {
       console.error('Speed calculation error:', error);
-      return currentSpeed || 0; // Hata durumunda önceki hızı koru
+      return currentSpeedRef.current || 0; // Hata durumunda önceki hızı koru
     }
-  };
+  }, []);
 
   const handleUserJoined = (data) => {
     console.log('User joined:', data);
