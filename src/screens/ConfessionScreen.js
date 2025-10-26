@@ -15,6 +15,7 @@ import {
   Modal,
   Image,
   FlatList,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -43,6 +44,7 @@ export default function ConfessionScreen() {
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [confessionLikes, setConfessionLikes] = useState([]);
   const [isLoadingLikes, setIsLoadingLikes] = useState(false);
+  const [showConfessionModal, setShowConfessionModal] = useState(false);
 
   useEffect(() => {
     loadConfessions();
@@ -178,6 +180,7 @@ export default function ConfessionScreen() {
             text: 'Tamam',
             onPress: () => {
               setConfession('');
+              setShowConfessionModal(false);
               loadConfessions(); // Refresh the list
             }
           }
@@ -307,6 +310,24 @@ export default function ConfessionScreen() {
     }
   };
 
+  const handleShareConfession = async (confession) => {
+    try {
+      const shareContent = {
+        message: `"${confession.content}"\n\n- Anonim İtiraf\n\nCadDate uygulamasından paylaşıldı`,
+        title: 'İtiraf Paylaş',
+      };
+
+      if (Platform.OS === 'ios') {
+        await Share.share(shareContent);
+      } else {
+        await Share.share(shareContent);
+      }
+    } catch (error) {
+      console.error('❌ Share confession error:', error);
+      Alert.alert('Hata', 'Paylaşım sırasında bir hata oluştu.');
+    }
+  };
+
   const renderConfessionItem = (item) => {
     if (!item || typeof item !== 'object') return null;
     const contentText = typeof item.content === 'string' ? item.content : '';
@@ -314,45 +335,68 @@ export default function ConfessionScreen() {
     const likes = typeof item.likesCount === 'number' ? item.likesCount : (typeof item.likes === 'number' ? item.likes : 0);
 
     return (
-    <View style={styles.confessionItem}>
-      <View style={styles.confessionHeader}>
-        <View style={styles.anonymousIcon}>
-          <Ionicons name="person-circle-outline" size={scale(20)} color={colors.text.tertiary} />
-        </View>
-        <Text style={styles.anonymousLabel}>Anonim</Text>
-        <View style={styles.confessionBadge}>
-          <Ionicons name="shield-checkmark-outline" size={scale(12)} color={colors.success} />
-          <Text style={styles.confessionBadgeText}>Güvenli</Text>
-        </View>
-      </View>
-      <View style={styles.confessionContent}>
-        <Text style={styles.confessionText}>{contentText}</Text>
-        <View style={styles.confessionFooter}>
-          <View style={styles.timestampContainer}>
-            <Ionicons name="time-outline" size={scale(12)} color={colors.text.tertiary} />
-            <Text style={styles.confessionTimestamp}>{timeAgoText}</Text>
+      <View style={styles.confessionCard}>
+        {/* Card Header with Gradient */}
+        <LinearGradient
+          colors={colors.gradients.primary}
+          style={styles.cardHeader}
+        >
+          <View style={styles.cardHeaderContent}>
+            <View style={styles.anonymousAvatar}>
+              <Ionicons name="person-circle" size={scale(20)} color={colors.text.light} />
+            </View>
+            <View style={styles.cardHeaderInfo}>
+              <Text style={styles.anonymousName}>Anonim</Text>
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="shield-checkmark" size={scale(10)} color={colors.text.light} />
+                <Text style={styles.verifiedText}>Güvenli</Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.actionButtons}>
+          <View style={styles.timeContainer}>
+            <Ionicons name="time" size={scale(12)} color={colors.text.light} />
+            <Text style={styles.timeText}>{timeAgoText}</Text>
+          </View>
+        </LinearGradient>
+
+        {/* Card Content */}
+        <View style={styles.cardContent}>
+          <Text style={styles.confessionText} numberOfLines={6}>
+            {contentText}
+          </Text>
+        </View>
+
+        {/* Card Footer */}
+        <View style={styles.cardFooter}>
+          <View style={styles.cardStats}>
             <TouchableOpacity 
-              style={styles.likeButton}
+              style={styles.statItem}
               onPress={() => handleLikeConfession(item.id)}
             >
-              <Ionicons name="heart-outline" size={scale(16)} color={colors.primary} />
-              <Text style={styles.likeCount}>{likes}</Text>
+              <Ionicons name="heart-outline" size={scale(14)} color={colors.primary} />
+              <Text style={styles.statText}>{likes}</Text>
             </TouchableOpacity>
             {likes > 0 && (
               <TouchableOpacity 
-                style={styles.likesViewButton}
+                style={styles.statItem}
                 onPress={() => handleShowLikes(item.id)}
               >
                 <Ionicons name="people-outline" size={scale(14)} color={colors.text.secondary} />
               </TouchableOpacity>
             )}
           </View>
+          
+          <View style={styles.cardActions}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => handleShareConfession(item)}
+            >
+              <Ionicons name="share-outline" size={scale(14)} color={colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
   };
 
   const renderLikeItem = ({ item }) => (
@@ -394,115 +438,147 @@ export default function ConfessionScreen() {
           <View style={styles.headerIconContainer}>
             <Ionicons name="heart-circle-outline" size={scale(32)} color={colors.text.light} />
           </View>
-          <Text style={styles.headerTitle}>İtiraf</Text>
-          <Text style={styles.headerSubtitle}>Anonim olarak paylaş</Text>
+          <Text style={styles.headerTitle}>İtiraflar</Text>
+          <Text style={styles.headerSubtitle}>Anonim paylaşımlar</Text>
         </View>
       </LinearGradient>
 
-      <KeyboardAvoidingView 
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        {/* Submit Confession Section */}
-        <View style={styles.submitSection}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIconContainer}>
-              <Ionicons name="create-outline" size={scale(24)} color={colors.primary} />
+      {/* Confessions List */}
+      <View style={styles.content}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <View style={styles.loadingIconContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
-            <Text style={styles.sectionTitle}>İtirafını Paylaş</Text>
+            <Text style={styles.loadingText}>İtiraflar yükleniyor...</Text>
+            <Text style={styles.loadingSubtext}>Lütfen bekleyin</Text>
           </View>
-          <View style={styles.inputContainer}>
-            <View style={styles.inputHeader}>
-              <Ionicons name="chatbubble-outline" size={scale(20)} color={colors.text.secondary} />
-              <Text style={styles.inputLabel}>Anonim İtiraf</Text>
+        ) : confessions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="chatbubbles-outline" size={scale(60)} color={colors.text.tertiary} />
             </View>
-            <TextInput
-              style={styles.confessionInput}
-              placeholder="İtirafını buraya yaz..."
-              placeholderTextColor={colors.text.tertiary}
-              value={confession}
-              onChangeText={setConfession}
-              multiline
-              maxLength={500}
-              textAlignVertical="top"
-            />
-            <View style={styles.inputFooter}>
-              <View style={styles.characterCountContainer}>
-                <Ionicons name="text-outline" size={scale(14)} color={colors.text.tertiary} />
-                <Text style={styles.characterCount}>{confession.length}/500</Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  (!confession.trim() || confession.trim().length < 10) && styles.submitButtonDisabled
-                ]}
-                onPress={submitConfession}
-                disabled={isSubmitting || !confession.trim() || confession.trim().length < 10}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color={colors.text.light} />
-                ) : (
-                  <>
-                    <Ionicons name="send" size={scale(16)} color={colors.text.light} style={{ marginRight: scale(5) }} />
-                    <Text style={styles.submitButtonText}>Gönder</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Confessions List */}
-        <View style={styles.listSection}>
-          <View style={styles.listHeader}>
-            <View style={styles.listHeaderLeft}>
-              <View style={styles.sectionIconContainer}>
-                <Ionicons name="chatbubbles-outline" size={scale(20)} color={colors.primary} />
-              </View>
-              <Text style={styles.sectionTitle}>Diğer İtiraflar</Text>
-            </View>
-            <View style={styles.headerButtons}>
-              <TouchableOpacity style={styles.debugButton} onPress={debugAuth}>
-                <Ionicons name="bug-outline" size={scale(16)} color={colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.refreshButton} onPress={loadConfessions}>
-                <Ionicons name="refresh" size={scale(20)} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <View style={styles.loadingIconContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-              </View>
-              <Text style={styles.loadingText}>İtiraflar yükleniyor...</Text>
-              <Text style={styles.loadingSubtext}>Lütfen bekleyin</Text>
-            </View>
-          ) : confessions.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconContainer}>
-                <Ionicons name="chatbubbles-outline" size={scale(60)} color={colors.text.tertiary} />
-              </View>
-              <Text style={styles.emptyText}>Henüz itiraf yok</Text>
-              <Text style={styles.emptySubtext}>İlk itirafı sen yap!</Text>
-              <View style={styles.emptyActionContainer}>
-                <Ionicons name="arrow-up" size={scale(16)} color={colors.primary} />
-                <Text style={styles.emptyActionText}>Yukarıdaki alana yazarak başla</Text>
-              </View>
-            </View>
-          ) : (
-            <ScrollView 
-              style={styles.confessionsList}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.confessionsListContent}
+            <Text style={styles.emptyText}>Henüz itiraf yok</Text>
+            <Text style={styles.emptySubtext}>İlk itirafı sen yap!</Text>
+            <TouchableOpacity 
+              style={styles.emptyActionButton}
+              onPress={() => setShowConfessionModal(true)}
             >
-              {confessions.map(renderConfessionItem)}
-            </ScrollView>
-          )}
-        </View>
-      </KeyboardAvoidingView>
+              <Ionicons name="add" size={scale(20)} color={colors.text.light} />
+              <Text style={styles.emptyActionButtonText}>İtiraf Paylaş</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={confessions}
+            renderItem={({ item }) => renderConfessionItem(item)}
+            keyExtractor={(item) => item.id.toString()}
+            style={styles.confessionsList}
+            contentContainerStyle={styles.confessionsListContent}
+            showsVerticalScrollIndicator={false}
+            refreshing={isLoading}
+            onRefresh={loadConfessions}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+          />
+        )}
+      </View>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity 
+        style={styles.fab}
+        onPress={() => setShowConfessionModal(true)}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={colors.gradients.primary}
+          style={styles.fabGradient}
+        >
+          <Ionicons name="add" size={scale(24)} color={colors.text.light} />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Confession Modal */}
+      <Modal
+        visible={showConfessionModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowConfessionModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowConfessionModal(false)}
+            >
+              <Ionicons name="close" size={scale(24)} color={colors.text.primary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>İtirafını Paylaş</Text>
+            <View style={styles.modalHeaderSpacer} />
+          </View>
+
+          <KeyboardAvoidingView 
+            style={styles.modalContent}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View style={styles.confessionForm}>
+              <View style={styles.formHeader}>
+                <View style={styles.formIconContainer}>
+                  <Ionicons name="shield-checkmark-outline" size={scale(24)} color={colors.success} />
+                </View>
+                <View style={styles.formHeaderText}>
+                  <Text style={styles.formTitle}>Anonim İtiraf</Text>
+                  <Text style={styles.formSubtitle}>Kimliğiniz gizli kalacak</Text>
+                </View>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.confessionInput}
+                  placeholder="İtirafını buraya yaz..."
+                  placeholderTextColor={colors.text.tertiary}
+                  value={confession}
+                  onChangeText={setConfession}
+                  multiline
+                  maxLength={500}
+                  textAlignVertical="top"
+                />
+                <View style={styles.inputFooter}>
+                  <View style={styles.characterCountContainer}>
+                    <Ionicons name="text-outline" size={scale(14)} color={colors.text.tertiary} />
+                    <Text style={styles.characterCount}>{confession.length}/500</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.submitButton,
+                      (!confession.trim() || confession.trim().length < 10) && styles.submitButtonDisabled
+                    ]}
+                    onPress={submitConfession}
+                    disabled={isSubmitting || !confession.trim() || confession.trim().length < 10}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color={colors.text.light} />
+                    ) : (
+                      <>
+                        <Ionicons name="send" size={scale(16)} color={colors.text.light} style={{ marginRight: scale(5) }} />
+                        <Text style={styles.submitButtonText}>Paylaş</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.privacyInfo}>
+                <Ionicons name="lock-closed-outline" size={scale(16)} color={colors.text.secondary} />
+                <Text style={styles.privacyText}>
+                  İtirafınız tamamen anonim olarak paylaşılacak. Kimliğiniz hiçbir şekilde açığa çıkmayacak.
+                </Text>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Beğenenler Modal */}
       <Modal
@@ -556,8 +632,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingTop: getBottomSafeArea() + verticalScale(20),
-    paddingBottom: verticalScale(20),
+    paddingTop: getBottomSafeArea() + verticalScale(10),
+    paddingBottom: verticalScale(15),
     paddingHorizontal: getResponsivePadding(20),
   },
   headerContent: {
@@ -580,28 +656,6 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   content: {
-    flex: 1,
-  },
-  submitSection: {
-    padding: getResponsivePadding(20),
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: verticalScale(15),
-  },
-  sectionIconContainer: {
-    backgroundColor: colors.primaryAlpha,
-    borderRadius: scale(20),
-    padding: scale(8),
-    marginRight: scale(10),
-  },
-  sectionTitle: {
-    fontSize: scaleFont(20),
-    fontWeight: 'bold',
-    color: colors.text.primary,
     flex: 1,
   },
   inputContainer: {
@@ -713,102 +767,225 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   confessionsListContent: {
-    paddingBottom: verticalScale(20),
+    padding: getResponsivePadding(15),
+    paddingBottom: verticalScale(100), // FAB için boşluk
   },
-  confessionItem: {
-    backgroundColor: colors.surface,
-    borderRadius: scale(15),
-    marginBottom: verticalScale(15),
+  row: {
+    justifyContent: 'space-between',
+    paddingHorizontal: scale(5),
+  },
+  // Floating Action Button
+  fab: {
+    position: 'absolute',
+    bottom: verticalScale(30),
+    right: scale(20),
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
     shadowColor: colors.shadow.dark,
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 8,
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: scale(28),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Empty State Button
+  emptyActionButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: scale(24),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(25),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: verticalScale(20),
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  emptyActionButtonText: {
+    color: colors.text.light,
+    fontSize: scaleFont(16),
+    fontWeight: 'bold',
+    marginLeft: scale(8),
+  },
+  // Modal Styles
+  modalContent: {
+    flex: 1,
+    padding: getResponsivePadding(20),
+  },
+  confessionForm: {
+    flex: 1,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: verticalScale(20),
+    backgroundColor: colors.success + '10',
+    padding: getResponsivePadding(15),
+    borderRadius: scale(12),
+  },
+  formIconContainer: {
+    backgroundColor: colors.success + '20',
+    borderRadius: scale(20),
+    padding: scale(8),
+    marginRight: scale(12),
+  },
+  formHeaderText: {
+    flex: 1,
+  },
+  formTitle: {
+    fontSize: scaleFont(18),
+    fontWeight: 'bold',
+    color: colors.text.primary,
+    marginBottom: verticalScale(4),
+  },
+  formSubtitle: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+  },
+  privacyInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.info + '10',
+    padding: getResponsivePadding(15),
+    borderRadius: scale(12),
+    marginTop: verticalScale(20),
+  },
+  privacyText: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+    marginLeft: scale(8),
+    flex: 1,
+    lineHeight: scaleFont(20),
+  },
+  // Modern Confession Card Styles
+  confessionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: scale(16),
+    marginBottom: verticalScale(15),
+    marginHorizontal: scale(5),
+    shadowColor: colors.shadow.dark,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
     borderColor: colors.border.light,
     overflow: 'hidden',
+    flex: 1,
+    maxWidth: (screenWidth - scale(40)) / 2,
   },
-  confessionHeader: {
+  cardHeader: {
+    paddingHorizontal: getResponsivePadding(12),
+    paddingVertical: getResponsivePadding(10),
+  },
+  cardHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: getResponsivePadding(15),
-    paddingTop: getResponsivePadding(15),
-    paddingBottom: getResponsivePadding(8),
-    backgroundColor: colors.primaryAlpha,
+    marginBottom: verticalScale(6),
   },
-  anonymousIcon: {
+  anonymousAvatar: {
     marginRight: scale(8),
   },
-  anonymousLabel: {
-    fontSize: scaleFont(12),
-    color: colors.text.secondary,
-    fontWeight: '500',
+  cardHeaderInfo: {
     flex: 1,
   },
-  confessionBadge: {
+  anonymousName: {
+    fontSize: scaleFont(13),
+    fontWeight: 'bold',
+    color: colors.text.light,
+    marginBottom: verticalScale(2),
+  },
+  verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.success + '20',
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(4),
-    borderRadius: scale(12),
+    backgroundColor: colors.success + '30',
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: scale(8),
+    alignSelf: 'flex-start',
   },
-  confessionBadgeText: {
-    fontSize: scaleFont(10),
-    color: colors.success,
+  verifiedText: {
+    fontSize: scaleFont(9),
+    color: colors.text.light,
     fontWeight: '600',
-    marginLeft: scale(4),
+    marginLeft: scale(3),
   },
-  confessionContent: {
-    padding: getResponsivePadding(15),
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+  },
+  timeText: {
+    fontSize: scaleFont(10),
+    color: colors.text.light,
+    marginLeft: scale(4),
+    opacity: 0.9,
+  },
+  cardContent: {
+    padding: getResponsivePadding(12),
+    minHeight: verticalScale(80),
   },
   confessionText: {
-    fontSize: scaleFont(16),
+    fontSize: scaleFont(14),
     color: colors.text.primary,
-    lineHeight: scaleFont(22),
-    marginBottom: verticalScale(10),
+    lineHeight: scaleFont(20),
+    textAlign: 'left',
   },
-  confessionFooter: {
+  cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: getResponsivePadding(12),
+    paddingVertical: getResponsivePadding(8),
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
   },
-  timestampContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  confessionTimestamp: {
-    fontSize: scaleFont(12),
-    color: colors.text.tertiary,
-    marginLeft: scale(5),
-  },
-  actionButtons: {
+  cardStats: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(8),
   },
-  likeButton: {
+  statItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primaryAlpha,
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(6),
-    borderRadius: scale(15),
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(12),
   },
-  likeCount: {
-    fontSize: scaleFont(12),
+  statText: {
+    fontSize: scaleFont(11),
     color: colors.primary,
-    marginLeft: scale(5),
+    marginLeft: scale(4),
     fontWeight: '600',
   },
-  likesViewButton: {
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    padding: scale(6),
+    borderRadius: scale(8),
     backgroundColor: colors.text.tertiary + '20',
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(6),
-    borderRadius: scale(12),
   },
   loadingContainer: {
     flex: 1,

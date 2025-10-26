@@ -399,7 +399,7 @@ const { pool } = require('../config/database');
           u.first_name,
           u.last_name,
           u.profile_picture,
-          u.age,
+          u.birth_date,
           u.gender
         FROM confession_likes cl
         JOIN users u ON cl.user_id = u.id
@@ -407,15 +407,22 @@ const { pool } = require('../config/database');
         ORDER BY cl.created_at DESC
       `, [confessionId]);
 
-      const likes = result.rows.map(row => ({
-        firstName: row.first_name,
-        lastName: row.last_name ? row.last_name.charAt(0) + '.' : '',
-        profilePicture: row.profile_picture,
-        age: row.age,
-        gender: row.gender,
-        likedAt: row.created_at,
-        timeAgo: getTimeAgo(row.created_at)
-      }));
+      const likes = result.rows.map(row => {
+        // Yaş hesapla
+        const age = row.birth_date ? 
+          Math.floor((new Date() - new Date(row.birth_date)) / (365.25 * 24 * 60 * 60 * 1000)) : 
+          null;
+
+        return {
+          firstName: row.first_name,
+          lastName: row.last_name ? row.last_name.charAt(0) + '.' : '',
+          profilePicture: row.profile_picture,
+          age: age,
+          gender: row.gender,
+          likedAt: row.created_at,
+          timeAgo: getTimeAgo(row.created_at)
+        };
+      });
 
       res.json({
         success: true,
