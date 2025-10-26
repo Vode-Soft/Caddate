@@ -6,6 +6,8 @@ const {
   updatePhoto,
   deletePhoto, 
   likePhoto,
+  addComment,
+  getPhotoComments,
   upload
 } = require('../controllers/photoController');
 const { authenticateToken } = require('../middleware/auth');
@@ -24,13 +26,19 @@ router.get('/feed', getPhotos);
 // GET /api/photos/my - Kendi fotoğraflarını getir
 router.get('/my', getMyPhotos);
 
+// POST /api/photos/:photoId/like - Fotoğraf beğen/beğenme
+router.post('/:photoId/like', likePhoto);
+
+// POST /api/photos/:photoId/comments - Fotoğrafa yorum ekle
+router.post('/:photoId/comments', addComment);
+
+// GET /api/photos/:photoId/comments - Fotoğrafın yorumlarını getir
+router.get('/:photoId/comments', getPhotoComments);
+
 // PUT /api/photos/:photoId - Fotoğraf güncelle
 router.put('/:photoId', updatePhoto);
 
 // DELETE /api/photos/:photoId - Fotoğraf sil
 router.delete('/:photoId', deletePhoto);
-
-// POST /api/photos/:photoId/like - Fotoğraf beğen/beğenme
-router.post('/:photoId/like', likePhoto);
 
 module.exports = router;

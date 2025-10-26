@@ -924,6 +924,14 @@ class ApiService {
     return this.post(`/photos/${photoId}/like`);
   }
 
+  async addComment(photoId, comment) {
+    return this.post(`/photos/${photoId}/comments`, { comment });
+  }
+
+  async getPhotoComments(photoId, limit = 50, offset = 0) {
+    return this.get(`/photos/${photoId}/comments?limit=${limit}&offset=${offset}`);
+  }
+
   async deletePhoto(photoId) {
     return this.delete(`/photos/${photoId}`);
   }

@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Animated,
   AppState,
-  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 // React Native Maps import'u
@@ -973,11 +972,10 @@ export default function MapScreen() {
                   pinColor={colors.primary}
                 >
                   <View style={styles.userMarker}>
-                    <Image 
-                      source={require('../../assets/user-location-arrow.png')} 
-                      style={styles.locationArrow}
-                      resizeMode="contain"
-                    />
+                    <View style={styles.arrowContainer}>
+                      <View style={styles.arrowUp} />
+                      <View style={styles.arrowDown} />
+                    </View>
                   </View>
                 </Marker>
               )}
@@ -1011,11 +1009,10 @@ export default function MapScreen() {
                      pinColor={colors.secondary}
                    >
                      <View style={styles.otherUserMarker}>
-                       <Image 
-                         source={require('../../assets/other-user-location-arrow.png')} 
-                         style={styles.locationArrow}
-                         resizeMode="contain"
-                       />
+                       <View style={styles.arrowContainer}>
+                         <View style={styles.arrowUp} />
+                         <View style={styles.arrowDown} />
+                       </View>
                      </View>
                    </Marker>
                  );
@@ -1714,9 +1711,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  locationArrow: {
+  arrowContainer: {
     width: isTablet ? 24 : 20,
     height: isTablet ? 24 : 20,
-    tintColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowUp: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: isTablet ? 8 : 6,
+    borderRightWidth: isTablet ? 8 : 6,
+    borderBottomWidth: isTablet ? 12 : 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#FFFFFF',
+    marginBottom: 2,
+  },
+  arrowDown: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: isTablet ? 8 : 6,
+    borderRightWidth: isTablet ? 8 : 6,
+    borderTopWidth: isTablet ? 12 : 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#FFFFFF',
+    marginTop: 2,
   },
 });

@@ -407,50 +407,102 @@ export default function PhotoScreen() {
     setNewComment('');
   };
 
-  const addComment = () => {
-    if (newComment.trim()) {
-      const comment = {
-        id: Date.now(),
-        user: 'Sen', // Gerçek uygulamada current user name
-        text: newComment.trim(),
-        time: 'Şimdi',
-        avatar: '👤'
-      };
-      setComments(prev => [...prev, comment]);
-      setNewComment('');
+  const addComment = async () => {
+    if (!newComment.trim() || !selectedPhoto) {
+      return;
+    }
+
+    try {
+      // Token'ı kontrol et
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+
+      // Token'ı API servisine set et
+      apiService.setToken(token);
+
+      // API ile yorum ekle
+      const response = await apiService.addComment(selectedPhoto.id, newComment.trim());
+
+      if (response.success && response.data.comment) {
+        const comment = response.data.comment;
+        
+        // Formatla
+        const formattedComment = {
+          id: comment.id,
+          user: `${comment.first_name} ${comment.last_name}`,
+          text: comment.comment,
+          time: 'Şimdi',
+          avatar: comment.profile_picture ? '👤' : '👤'
+        };
+
+        // Yorumu listeye ekle
+        setComments(prev => [...prev, formattedComment]);
+        setNewComment('');
+
+        // Fotoğraflar listesindeki yorum sayısını güncelle
+        setPhotos(prevPhotos => 
+          prevPhotos.map(photo => 
+            photo.id === selectedPhoto.id 
+              ? { ...photo, comments: (photo.comments || 0) + 1 }
+              : photo
+          )
+        );
+        
+        // Seçili fotoğrafın yorum sayısını güncelle
+        setSelectedPhoto(prev => ({ ...prev, comments: (prev.comments || 0) + 1 }));
+
+        // Socket ile diğer kullanıcılara bildir
+        if (socketService.isSocketConnected()) {
+          socketService.emit('photo_comment_added', {
+            photoId: selectedPhoto.id,
+            commentId: comment.id
+          });
+        }
+      } else {
+        Alert.alert('Hata', 'Yorum eklenirken bir hata oluştu');
+      }
+    } catch (error) {
+      console.error('Add comment error:', error);
+      Alert.alert('Hata', 'Yorum eklenirken bir hata oluştu');
     }
   };
 
-  const toggleComments = () => {
+  const toggleComments = async () => {
     console.log('toggleComments çağrıldı, mevcut showComments:', showComments);
-    setShowComments(!showComments);
-    if (!showComments && comments.length === 0) {
-      console.log('Mock yorumlar ekleniyor...');
-      // Mock yorumlar ekle
-      setComments([
-        {
-          id: 1,
-          user: 'Ahmet Yılmaz',
-          text: 'Harika bir fotoğraf! 📸',
-          time: '2 saat önce',
-          avatar: '👤'
-        },
-        {
-          id: 2,
-          user: 'Ayşe Demir',
-          text: 'Çok güzel bir manzara 😍',
-          time: '1 saat önce',
-          avatar: '👤'
-        },
-        {
-          id: 3,
-          user: 'Mehmet Kaya',
-          text: 'Nerede çekildi bu?',
-          time: '30 dk önce',
-          avatar: '👤'
+    
+    if (!showComments && selectedPhoto) {
+      // Yorumları yükle - önce temizle
+      setComments([]);
+      
+      try {
+        const token = await apiService.getStoredToken();
+        if (token) {
+          apiService.setToken(token);
+          const response = await apiService.getPhotoComments(selectedPhoto.id);
+          
+          if (response.success && response.data.comments) {
+            const formattedComments = response.data.comments.map(comment => ({
+              id: comment.id,
+              user: `${comment.first_name} ${comment.last_name}`,
+              text: comment.comment,
+              time: new Date(comment.created_at).toLocaleTimeString('tr-TR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              avatar: comment.profile_picture ? '👤' : '👤'
+            }));
+            setComments(formattedComments);
+          }
         }
-      ]);
+      } catch (error) {
+        console.error('Load comments error:', error);
+      }
     }
+    
+    setShowComments(!showComments);
   };
 
 
@@ -756,12 +808,17 @@ export default function PhotoScreen() {
                       styles.photoModalCommentSendButton,
                       !newComment.trim() && styles.photoModalCommentSendButtonDisabled
                     ]}
-                    onPress={addComment}
+                    onPress={() => {
+                      console.log('Send button pressed, newComment:', newComment);
+                      addComment();
+                    }}
                     disabled={!newComment.trim()}
+                    activeOpacity={newComment.trim() ? 0.7 : 1}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Ionicons 
                       name="send" 
-                      size={scale(18)} 
+                      size={scale(20)} 
                       color={newComment.trim() ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)"} 
                     />
                   </TouchableOpacity>
@@ -1043,13 +1100,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2000,
+    zIndex: 2500, // Navbar'dan daha yüksek z-index
   },
   photoModalCloseButton: {
     position: 'absolute',
     top: isAndroid ? StatusBar.currentHeight + scale(20) : scale(50),
     right: scale(20),
-    zIndex: 2001,
+    zIndex: 3002, // En yüksek z-index
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: scale(25),
     width: scale(50),
@@ -1071,8 +1128,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     paddingHorizontal: scale(20),
     paddingVertical: scale(20),
-    paddingBottom: getBottomSafeArea() + scale(20),
-    zIndex: 2001,
+    paddingBottom: getBottomSafeArea() + scale(100), // Navbar yüksekliği kadar ekstra padding
+    zIndex: 3000, // Navbar'dan daha yüksek z-index
+    borderTopLeftRadius: scale(20),
+    borderTopRightRadius: scale(20),
   },
   photoModalUserInfo: {
     flexDirection: 'row',
@@ -1113,25 +1172,27 @@ const styles = StyleSheet.create({
   photoModalActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    paddingHorizontal: scale(10),
   },
   photoModalActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: scale(16),
-    paddingVertical: scale(10),
+    paddingVertical: scale(12),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: scale(20),
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    minWidth: scale(60),
-    minHeight: scale(44),
+    minWidth: scale(70),
+    minHeight: scale(48),
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+    marginHorizontal: scale(4),
   },
   photoModalLikedButton: {
     backgroundColor: 'rgba(255, 107, 107, 0.2)',
@@ -1160,49 +1221,75 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    marginTop: scale(15),
-    maxHeight: verticalScale(300),
-    zIndex: 2000,
-    borderTopLeftRadius: scale(20),
-    borderTopRightRadius: scale(20),
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(15, 15, 15, 0.98)',
+    maxHeight: verticalScale(350),
+    zIndex: 3001,
+    borderTopLeftRadius: scale(25),
+    borderTopRightRadius: scale(25),
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: scale(20),
+    paddingTop: scale(20),
+    paddingBottom: getBottomSafeArea() + scale(100),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 15,
   },
   photoModalCommentsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: scale(10),
-    paddingBottom: scale(8),
+    marginBottom: scale(20),
+    paddingBottom: scale(15),
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   photoModalCommentsTitle: {
-    fontSize: getResponsiveFontSize(14),
-    fontWeight: '700',
+    fontSize: getResponsiveFontSize(18),
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   photoModalCommentsList: {
-    maxHeight: verticalScale(120),
+    maxHeight: verticalScale(180),
+    paddingHorizontal: scale(8),
+    paddingVertical: scale(8),
   },
   photoModalCommentItem: {
     flexDirection: 'row',
-    marginBottom: scale(12),
-    paddingHorizontal: scale(4),
+    marginBottom: scale(16),
+    paddingHorizontal: scale(12),
+    paddingVertical: scale(10),
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: scale(15),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   photoModalCommentAvatar: {
-    width: scale(32),
-    height: scale(32),
-    borderRadius: scale(16),
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
+    backgroundColor: 'rgba(220, 38, 38, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: scale(10),
+    marginRight: scale(12),
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   photoModalCommentAvatarText: {
-    fontSize: scale(16),
+    fontSize: scale(18),
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   photoModalCommentContent: {
     flex: 1,
@@ -1210,51 +1297,74 @@ const styles = StyleSheet.create({
   photoModalCommentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: scale(4),
+    marginBottom: scale(6),
   },
   photoModalCommentUser: {
-    fontSize: getResponsiveFontSize(13),
-    fontWeight: '700',
+    fontSize: getResponsiveFontSize(15),
+    fontWeight: '800',
     color: '#FFFFFF',
-    marginRight: scale(8),
+    marginRight: scale(10),
+    letterSpacing: 0.3,
   },
   photoModalCommentTime: {
-    fontSize: getResponsiveFontSize(11),
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: getResponsiveFontSize(12),
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '500',
   },
   photoModalCommentText: {
-    fontSize: getResponsiveFontSize(13),
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: getResponsiveFontSize(18),
+    fontSize: getResponsiveFontSize(14),
+    color: 'rgba(255, 255, 255, 0.95)',
+    lineHeight: getResponsiveFontSize(20),
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   photoModalCommentInput: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginTop: scale(10),
-    paddingTop: scale(10),
+    marginTop: scale(20),
+    paddingTop: scale(20),
+    paddingBottom: scale(10),
+    paddingHorizontal: scale(8),
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: scale(20),
   },
   photoModalCommentTextInput: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: scale(20),
-    paddingHorizontal: scale(16),
-    paddingVertical: scale(10),
-    fontSize: getResponsiveFontSize(13),
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: scale(25),
+    paddingHorizontal: scale(18),
+    paddingVertical: scale(12),
+    fontSize: getResponsiveFontSize(14),
     color: '#FFFFFF',
-    marginRight: scale(8),
-    maxHeight: verticalScale(80),
+    marginRight: scale(12),
+    maxHeight: verticalScale(100),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    textAlignVertical: 'top',
   },
   photoModalCommentSendButton: {
     backgroundColor: colors.primary,
-    borderRadius: scale(20),
-    width: scale(40),
-    height: scale(40),
+    borderRadius: scale(25),
+    width: scale(50),
+    height: scale(50),
+    minWidth: scale(50),
+    minHeight: scale(50),
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   photoModalCommentSendButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    shadowOpacity: 0,
+    elevation: 0,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
 });

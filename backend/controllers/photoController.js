@@ -359,6 +359,97 @@ const likePhoto = async (req, res) => {
   }
 };
 
+// Fotoğrafa yorum ekle
+const addComment = async (req, res) => {
+  try {
+    const { photoId } = req.params;
+    const userId = req.user.id;
+    const { comment } = req.body;
+
+    if (!comment || !comment.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Yorum boş olamaz'
+      });
+    }
+
+    // PhotoComment model'ini import et
+    const PhotoComment = require('../models/PhotoComment');
+
+    // Yorumu oluştur
+    const newComment = await PhotoComment.create({
+      photo_id: photoId,
+      user_id: userId,
+      comment: comment.trim()
+    });
+
+    // Yorum detaylarını kullanıcı bilgisiyle birlikte getir
+    const commentWithUser = await pool.query(`
+      SELECT 
+        c.id,
+        c.photo_id,
+        c.user_id,
+        c.comment,
+        c.created_at,
+        u.first_name,
+        u.last_name,
+        u.profile_picture
+      FROM photo_comments c
+      JOIN users u ON c.user_id = u.id
+      WHERE c.id = $1
+    `, [newComment.id]);
+
+    res.json({
+      success: true,
+      message: 'Yorum eklendi',
+      data: {
+        comment: commentWithUser.rows[0]
+      }
+    });
+
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Fotoğrafın yorumlarını getir
+const getPhotoComments = async (req, res) => {
+  try {
+    const { photoId } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+
+    // PhotoComment model'ini import et
+    const PhotoComment = require('../models/PhotoComment');
+
+    const comments = await PhotoComment.getByPhotoId(photoId, parseInt(limit), parseInt(offset));
+
+    res.json({
+      success: true,
+      data: {
+        comments
+      },
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: comments.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Get photo comments error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Sunucu hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 // Zaman hesaplama yardımcı fonksiyonu
 const getTimeAgo = (date) => {
   const now = new Date();
@@ -385,5 +476,7 @@ module.exports = {
   updatePhoto,
   deletePhoto,
   likePhoto,
+  addComment,
+  getPhotoComments,
   upload
 };
