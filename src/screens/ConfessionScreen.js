@@ -36,7 +36,7 @@ import apiService from '../services/api';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-export default function ConfessionScreen() {
+export default function ConfessionScreen({ navigation }) {
   const [confession, setConfession] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confessions, setConfessions] = useState([]);
@@ -403,7 +403,18 @@ export default function ConfessionScreen() {
     <View style={styles.likeItem}>
       <View style={styles.likeUserInfo}>
         {item.profilePicture ? (
-          <Image source={{ uri: item.profilePicture }} style={styles.likeUserAvatar} />
+          <Image 
+            source={{ uri: apiService.getFullImageUrl(item.profilePicture) }} 
+            style={styles.likeUserAvatar} 
+            resizeMode="cover"
+            onError={(error) => {
+              console.log('❌ Like item image load error:', error.nativeEvent.error);
+              console.log('❌ Failed URL:', item.profilePicture);
+            }}
+            onLoad={() => {
+              console.log('✅ Like item image loaded successfully:', item.profilePicture);
+            }}
+          />
         ) : (
           <View style={styles.likeUserAvatarPlaceholder}>
             <Ionicons name="person" size={scale(20)} color={colors.text.tertiary} />
@@ -435,11 +446,20 @@ export default function ConfessionScreen() {
         style={styles.header}
       >
         <View style={styles.headerContent}>
-          <View style={styles.headerIconContainer}>
-            <Ionicons name="heart-circle-outline" size={scale(32)} color={colors.text.light} />
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={scale(24)} color={colors.text.light} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <View style={styles.headerIconContainer}>
+              <Ionicons name="heart-circle-outline" size={scale(32)} color={colors.text.light} />
+            </View>
+            <Text style={styles.headerTitle}>İtiraflar</Text>
+            <Text style={styles.headerSubtitle}>Anonim paylaşımlar</Text>
           </View>
-          <Text style={styles.headerTitle}>İtiraflar</Text>
-          <Text style={styles.headerSubtitle}>Anonim paylaşımlar</Text>
+          <View style={styles.headerSpacer} />
         </View>
       </LinearGradient>
 
@@ -637,7 +657,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: getResponsivePadding(20),
   },
   headerContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: scale(8),
+    borderRadius: scale(20),
+    backgroundColor: colors.primaryAlpha,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerSpacer: {
+    width: scale(40), // Back button ile aynı genişlik
   },
   headerIconContainer: {
     backgroundColor: colors.primaryAlpha,

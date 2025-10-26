@@ -373,7 +373,7 @@ const getSuggestedMatches = async (req, res) => {
         return res.json({
           success: true,
           data: {
-            matches: prioritizedMatches.matches,
+            suggestions: prioritizedMatches.matches,
             totalCount: prioritizedMatches.total,
             hasMore: prioritizedMatches.matches.length === parseInt(limit),
             isPrioritized: true
@@ -383,7 +383,7 @@ const getSuggestedMatches = async (req, res) => {
     }
 
     // Daha basit ve güvenli bir sorgu - konum kontrolü olmadan
-    const query = `
+    let query = `
       SELECT
         u.id,
         u.first_name,
@@ -400,20 +400,51 @@ const getSuggestedMatches = async (req, res) => {
       FROM users u
       WHERE u.id != $1
         AND u.is_active = true
+        AND u.birth_date IS NOT NULL
         AND u.id NOT IN (
           SELECT user2_id FROM matches WHERE user1_id = $1
           UNION
           SELECT user1_id FROM matches WHERE user2_id = $1
         )
-      ORDER BY u.created_at DESC
-      LIMIT $2 OFFSET $3
     `;
+    
+    // Parametre sayacı
+    let paramIndex = 4;
+    const conditions = [];
+    
+    // Yaş filtresi ekle (SQL seviyesinde)
+    conditions.push(`EXTRACT(YEAR FROM AGE(u.birth_date)) >= $${paramIndex}`);
+    paramIndex++;
+    conditions.push(`EXTRACT(YEAR FROM AGE(u.birth_date)) <= $${paramIndex}`);
+    paramIndex++;
+    
+    // Cinsiyet filtresi ekle
+    if (gender !== 'all') {
+      conditions.push(`u.gender = $${paramIndex}`);
+      paramIndex++;
+    }
+    
+    if (conditions.length > 0) {
+      query += ' AND ' + conditions.join(' AND ');
+    }
+    
+    query += ` ORDER BY u.created_at DESC LIMIT $2 OFFSET $3`;
 
-    const result = await pool.query(query, [
-      userId,
-      parseInt(limit),
-      parseInt(offset)
-    ]);
+    // Query parametrelerini hazırla
+    const queryParams = [userId, parseInt(limit), parseInt(offset)];
+    
+    // Yaş parametrelerini ekle
+    queryParams.push(parseInt(minAge), parseInt(maxAge));
+    
+    // Cinsiyet parametresini ekle
+    if (gender !== 'all') {
+      queryParams.push(gender);
+    }
+    
+    console.log('📋 Query:', query);
+    console.log('📋 Query Params:', queryParams);
+    
+    const result = await pool.query(query, queryParams);
 
     // Mesafe hesaplama fonksiyonu (Haversine formula) - Düzeltilmiş ve Debug
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -476,21 +507,9 @@ const getSuggestedMatches = async (req, res) => {
         };
       })
       .filter(user => {
-        // Filtrele: Yaş
-        if (user.age && (user.age < parseInt(minAge) || user.age > parseInt(maxAge))) {
-          console.log(`❌ Age filter: User ${user.id} (${user.age}) not in range ${minAge}-${maxAge}`);
-          return false;
-        }
-        
-        // Filtrele: Mesafe
+        // Sadece mesafe filtresini burada yapalım (SQL'de yapılamaz çünkü dinamik hesaplama gerekiyor)
         if (user.distance && user.distance > parseFloat(maxDistance)) {
           console.log(`❌ Distance filter: User ${user.id} (${user.distance}km) exceeds ${maxDistance}km`);
-          return false;
-        }
-        
-        // Filtrele: Cinsiyet
-        if (gender !== 'all' && user.gender && user.gender !== gender) {
-          console.log(`❌ Gender filter: User ${user.id} (${user.gender}) doesn't match ${gender}`);
           return false;
         }
         

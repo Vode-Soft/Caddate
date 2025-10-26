@@ -182,11 +182,7 @@ export default function PrivateChatScreen({ navigation, route }) {
         console.log('Kullanıcı profil bilgileri yüklendi:', response.data);
         
         // Profil fotoğrafı URL'sini tam URL'ye çevir
-        const profileData = response.data;
-        if (profileData.profile_picture && profileData.profile_picture.startsWith('/uploads/')) {
-          const apiBaseUrl = apiService.baseURL.replace('/api', '');
-          profileData.profile_picture = `${apiBaseUrl}${profileData.profile_picture}`;
-        }
+        const profileData = apiService.normalizeUserData(response.data);
         
         setFriendProfile(profileData);
         setShowProfileModal(true);
@@ -669,7 +665,7 @@ export default function PrivateChatScreen({ navigation, route }) {
               >
                 {friend.profilePicture ? (
                   <Image
-                    source={{ uri: friend.profilePicture }}
+                    source={{ uri: apiService.getFullImageUrl(friend.profilePicture) }}
                     style={styles.headerAvatar}
                     resizeMode="cover"
                     onError={(error) => {
@@ -848,7 +844,7 @@ export default function PrivateChatScreen({ navigation, route }) {
                   <View style={styles.modalImageContainer}>
                     {friendProfile.profile_picture ? (
                       <Image
-                        source={{ uri: friendProfile.profile_picture }}
+                        source={{ uri: apiService.getFullImageUrl(friendProfile.profile_picture) }}
                         style={styles.modalProfileImage}
                         resizeMode="cover"
                       />

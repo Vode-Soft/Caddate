@@ -1115,7 +1115,7 @@ export default function ChatScreen({ navigation, route }) {
                 <View style={styles.popupImageWrapper}>
                   {selectedFriend?.profilePicture ? (
                     <Image
-                      source={{ uri: selectedFriend.profilePicture }}
+                      source={{ uri: apiService.getFullImageUrl(selectedFriend.profilePicture) }}
                       style={styles.popupProfileImage}
                       resizeMode="cover"
                       onError={(error) => {

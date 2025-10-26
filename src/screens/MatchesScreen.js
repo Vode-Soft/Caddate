@@ -94,21 +94,34 @@ export default function MatchesScreen({ navigation }) {
         });
         console.log('🎯 Suggestions response:', response);
         if (response.success) {
-          console.log('✅ Suggestions data count:', response.data.suggestions.length);
-          console.log('✅ First 3 suggestions:', response.data.suggestions.slice(0, 3));
-          setSuggestions(response.data.suggestions);
+          // Güvenli bir şekilde suggestions dizisini al
+          const suggestions = response.data?.suggestions || [];
+          console.log('✅ Suggestions data count:', suggestions.length);
+          if (suggestions.length > 0) {
+            console.log('✅ First 3 suggestions:', suggestions.slice(0, 3));
+          }
+          setSuggestions(suggestions);
+        } else {
+          console.warn('⚠️ API returned unsuccessful response');
+          setSuggestions([]);
         }
       } else if (activeTab === 'matches') {
         const response = await apiService.getMatches({ mutualOnly: true });
         console.log('💕 Matches response:', response);
         if (response.success) {
-          setMatches(response.data.matches);
+          const matches = response.data?.matches || [];
+          setMatches(matches);
+        } else {
+          setMatches([]);
         }
       } else if (activeTab === 'likes') {
         const response = await apiService.getLikesReceived();
         console.log('💝 Likes response:', response);
         if (response.success) {
-          setLikesReceived(response.data.likes);
+          const likes = response.data?.likes || [];
+          setLikesReceived(likes);
+        } else {
+          setLikesReceived([]);
         }
       }
 
@@ -119,7 +132,11 @@ export default function MatchesScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Load data error:', error);
-      Alert.alert('Hata', 'Veriler yüklenirken bir hata oluştu');
+      Alert.alert('Hata', 'Veriler yüklenirken bir hata oluştu: ' + error.message);
+      // Hata durumunda boş array'ler set et
+      setSuggestions([]);
+      setMatches([]);
+      setLikesReceived([]);
     } finally {
       setLoading(false);
     }
@@ -311,12 +328,7 @@ export default function MatchesScreen({ navigation }) {
     // Profil fotoğrafı URL'ini düzenle
     const getProfileImageUrl = () => {
       if (user.profilePicture) {
-        // Eğer tam URL ise olduğu gibi kullan
-        if (user.profilePicture.startsWith('http')) {
-          return user.profilePicture;
-        }
-        // Backend'den gelen relative path ise tam URL oluştur
-        return `http://192.168.1.17:3000${user.profilePicture}`;
+        return apiService.getFullImageUrl(user.profilePicture);
       }
       // Default avatar
       return 'https://ui-avatars.com/api/?name=' + 
@@ -400,6 +412,60 @@ export default function MatchesScreen({ navigation }) {
   const renderSwipeCards = () => {
     const currentUsers = getCurrentUserList();
     
+    // Loading state
+    if (loading && currentUsers.length === 0) {
+      return (
+        <View style={styles.noMoreCards}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.noMoreCardsText}>Yükleniyor...</Text>
+        </View>
+      );
+    }
+    
+    // Empty state - no cards at all
+    if (currentUsers.length === 0) {
+      const hasFilters = filters.gender !== 'all' || filters.minAge !== 18 || filters.maxAge !== 99 || filters.maxDistance !== 100;
+      
+      return (
+        <View style={styles.noMoreCards}>
+          <MaterialCommunityIcons 
+            name="cards-heart" 
+            size={scale(80)} 
+            color={colors.text.tertiary} 
+          />
+          <Text style={styles.noMoreCardsText}>
+            {hasFilters 
+              ? 'Bu filtreler için sonuç bulunamadı' 
+              : 'Henüz öneri yok'}
+          </Text>
+          <Text style={styles.noMoreCardsSubText}>
+            {hasFilters 
+              ? 'Filtreleri değiştirmeyi deneyin' 
+              : 'Biraz sonra tekrar dene'}
+          </Text>
+          {hasFilters && (
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={() => {
+                setShowFilters(true);
+              }}
+            >
+              <Ionicons name="options" size={scale(24)} color="#fff" />
+              <Text style={styles.refreshButtonText}>Filtreleri Değiştir</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity 
+            style={[styles.refreshButton, { marginTop: scale(10), backgroundColor: colors.text.secondary }]}
+            onPress={onRefresh}
+          >
+            <Ionicons name="refresh" size={scale(24)} color="#fff" />
+            <Text style={styles.refreshButtonText}>Yenile</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    // All cards swiped
     if (currentIndex >= currentUsers.length) {
       return (
         <View style={styles.noMoreCards}>
@@ -409,16 +475,10 @@ export default function MatchesScreen({ navigation }) {
             color={colors.text.tertiary} 
           />
           <Text style={styles.noMoreCardsText}>
-            {activeTab === 'suggestions' 
-              ? 'Şimdilik bu kadar!' 
-              : activeTab === 'matches'
-              ? 'Henüz eşleşmen yok'
-              : 'Henüz kimse seni beğenmemiş'}
+            Şimdilik bu kadar!
           </Text>
           <Text style={styles.noMoreCardsSubText}>
-            {activeTab === 'suggestions' 
-              ? 'Biraz sonra tekrar dene' 
-              : 'İnsanları beğenmeye başla!'}
+            Biraz sonra tekrar dene veya filtreleri değiştir
           </Text>
           <TouchableOpacity 
             style={styles.refreshButton}
@@ -431,6 +491,7 @@ export default function MatchesScreen({ navigation }) {
       );
     }
 
+    // Render cards
     return (
       <View style={styles.cardsContainer}>
         {currentUsers
@@ -976,12 +1037,16 @@ export default function MatchesScreen({ navigation }) {
     );
   };
 
-  if (loading) {
+  // Initial loading state - only show on first load
+  if (loading && suggestions.length === 0 && matches.length === 0 && likesReceived.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Yükleniyor...</Text>
-      </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Yükleniyor...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 

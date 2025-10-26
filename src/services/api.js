@@ -93,6 +93,41 @@ class ApiService {
     return this.baseURL;
   }
 
+  // Profil fotoğrafı URL'ini tam URL'ye çevir
+  getFullImageUrl(imagePath) {
+    if (!imagePath) return null;
+    
+    // Eğer zaten tam URL ise olduğu gibi döndür
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // Relative path ise tam URL oluştur
+    const baseUrl = this.baseURL.replace('/api', '');
+    return `${baseUrl}${imagePath}`;
+  }
+
+  // Kullanıcı verilerindeki profil fotoğrafı URL'lerini düzenle
+  normalizeUserData(userData) {
+    if (!userData) return userData;
+    
+    const normalized = { ...userData };
+    
+    // Profil fotoğrafı URL'ini düzenle
+    if (normalized.profile_picture) {
+      normalized.profile_picture = this.getFullImageUrl(normalized.profile_picture);
+    }
+    
+    return normalized;
+  }
+
+  // Kullanıcı listesindeki profil fotoğrafı URL'lerini düzenle
+  normalizeUserList(userList) {
+    if (!Array.isArray(userList)) return userList;
+    
+    return userList.map(user => this.normalizeUserData(user));
+  }
+
   // Token'ı AsyncStorage'a kaydet
   async saveToken(token) {
     try {

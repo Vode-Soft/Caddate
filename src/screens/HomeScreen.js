@@ -290,7 +290,7 @@ export default function HomeScreen() {
               <View style={styles.profileModalHeader}>
                 <Image
                   source={{ 
-                    uri: userInfo?.profile_picture || 'https://picsum.photos/120/120?random=profile' 
+                    uri: apiService.getFullImageUrl(userInfo?.profile_picture) || 'https://picsum.photos/120/120?random=profile' 
                   }}
                   style={styles.modalProfileImage}
                   onError={(error) => {
