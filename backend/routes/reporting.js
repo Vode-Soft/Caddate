@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const adminAuth = require('../middleware/adminAuth');
+const { authenticateToken } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/adminAuth');
 const reportingController = require('../controllers/reportingController');
 
 // Kullanıcı şikayeti oluştur
-router.post('/report-user', auth, async (req, res) => {
+router.post('/report-user', authenticateToken, async (req, res) => {
   try {
     const { reportedUserId, reportType, description, evidence } = req.body;
     const reporterId = req.user.id;
@@ -49,7 +49,7 @@ router.post('/report-user', auth, async (req, res) => {
 });
 
 // Şikayet listesi (admin)
-router.get('/reports', adminAuth, async (req, res) => {
+router.get('/reports', requireAdmin, async (req, res) => {
   try {
     const { status = 'all', limit = 50, offset = 0 } = req.query;
     
@@ -71,7 +71,7 @@ router.get('/reports', adminAuth, async (req, res) => {
 });
 
 // Şikayet çözümle (admin)
-router.post('/resolve-report/:reportId', adminAuth, async (req, res) => {
+router.post('/resolve-report/:reportId', requireAdmin, async (req, res) => {
   try {
     const { reportId } = req.params;
     const { resolution, action } = req.body;
@@ -107,7 +107,7 @@ router.post('/resolve-report/:reportId', adminAuth, async (req, res) => {
 });
 
 // Kullanıcı şikayet istatistikleri
-router.get('/user-stats/:userId', adminAuth, async (req, res) => {
+router.get('/user-stats/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -128,7 +128,7 @@ router.get('/user-stats/:userId', adminAuth, async (req, res) => {
 });
 
 // Spam tespit algoritması
-router.get('/spam-detection/:userId', adminAuth, async (req, res) => {
+router.get('/spam-detection/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -149,7 +149,7 @@ router.get('/spam-detection/:userId', adminAuth, async (req, res) => {
 });
 
 // Kullanıcı yasakları listesi
-router.get('/bans', adminAuth, async (req, res) => {
+router.get('/bans', requireAdmin, async (req, res) => {
   try {
     const { status = 'active', limit = 50, offset = 0 } = req.query;
     
@@ -200,7 +200,7 @@ router.get('/bans', adminAuth, async (req, res) => {
 });
 
 // Kullanıcıyı yasakla (admin)
-router.post('/ban-user', adminAuth, async (req, res) => {
+router.post('/ban-user', requireAdmin, async (req, res) => {
   try {
     const { userId, reason, banType, duration } = req.body;
     const adminId = req.user.id;
@@ -243,7 +243,7 @@ router.post('/ban-user', adminAuth, async (req, res) => {
 });
 
 // Yasak kaldır (admin)
-router.post('/unban-user/:userId', adminAuth, async (req, res) => {
+router.post('/unban-user/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     const adminId = req.user.id;

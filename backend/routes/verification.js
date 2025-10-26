@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const verificationController = require('../controllers/verificationController');
 
 // Kullanıcının doğrulama seviyesini kontrol et
-router.get('/level', auth, async (req, res) => {
+router.get('/level', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const verificationLevel = await verificationController.getVerificationLevel(userId);
@@ -23,7 +23,7 @@ router.get('/level', auth, async (req, res) => {
 });
 
 // Telefon doğrulama kodu gönder
-router.post('/send-phone-code', auth, async (req, res) => {
+router.post('/send-phone-code', authenticateToken, async (req, res) => {
   try {
     const { phoneNumber } = req.body;
     const userId = req.user.id;
@@ -53,7 +53,7 @@ router.post('/send-phone-code', auth, async (req, res) => {
 });
 
 // Telefon doğrulama kodunu kontrol et
-router.post('/verify-phone-code', auth, async (req, res) => {
+router.post('/verify-phone-code', authenticateToken, async (req, res) => {
   try {
     const { code } = req.body;
     const userId = req.user.id;
@@ -82,7 +82,7 @@ router.post('/verify-phone-code', auth, async (req, res) => {
 });
 
 // Profil tamamlama oranını hesapla
-router.post('/calculate-completeness', auth, async (req, res) => {
+router.post('/calculate-completeness', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const completeness = await verificationController.calculateProfileCompleteness(userId);
@@ -103,7 +103,7 @@ router.post('/calculate-completeness', auth, async (req, res) => {
 });
 
 // Doğrulama seviyesine göre beğeni limitini al
-router.get('/like-limit', auth, async (req, res) => {
+router.get('/like-limit', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const limitInfo = await verificationController.getLikeLimitByVerification(userId);
@@ -123,7 +123,7 @@ router.get('/like-limit', auth, async (req, res) => {
 });
 
 // Doğrulama önerileri
-router.get('/suggestions', auth, async (req, res) => {
+router.get('/suggestions', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const suggestions = await verificationController.getVerificationSuggestions(userId);

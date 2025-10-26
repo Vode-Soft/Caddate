@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const antiSpamController = require('../controllers/antiSpamController');
 
 // Kullanıcının spam durumunu kontrol et
-router.get('/spam-status', auth, async (req, res) => {
+router.get('/spam-status', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const spamStatus = await antiSpamController.checkSpamStatus(userId);
@@ -23,7 +23,7 @@ router.get('/spam-status', auth, async (req, res) => {
 });
 
 // Günlük beğeni limitini kontrol et
-router.get('/daily-limit', auth, async (req, res) => {
+router.get('/daily-limit', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const limitCheck = await antiSpamController.checkDailyLikeLimit(userId);
@@ -42,7 +42,7 @@ router.get('/daily-limit', auth, async (req, res) => {
 });
 
 // Kullanıcıyı spam olarak işaretle (admin only)
-router.post('/mark-spam', auth, async (req, res) => {
+router.post('/mark-spam', authenticateToken, async (req, res) => {
   try {
     const { targetUserId, reason } = req.body;
     
@@ -71,7 +71,7 @@ router.post('/mark-spam', auth, async (req, res) => {
 });
 
 // Kız kullanıcılar için öncelikli eşleşmeler
-router.get('/prioritized-matches', auth, async (req, res) => {
+router.get('/prioritized-matches', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { limit = 20 } = req.query;
