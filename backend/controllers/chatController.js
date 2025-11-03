@@ -112,6 +112,37 @@ const sendMessage = async (req, res) => {
       });
     }
 
+    // Premium kontrolü - ücretsiz kullanıcılar için mesaj limiti
+    const Subscription = require('../models/Subscription');
+    const premiumStatus = await Subscription.checkUserPremiumStatus(senderId);
+    
+    if (!premiumStatus.isPremium || !premiumStatus.features['unlimited_messages']) {
+      // Ücretsiz kullanıcılar için günlük mesaj limiti kontrolü
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const messageCountQuery = `
+        SELECT COUNT(*) as message_count
+        FROM messages
+        WHERE sender_id = $1 
+          AND created_at >= $2
+      `;
+      const countResult = await pool.query(messageCountQuery, [senderId, today]);
+      const dailyMessageCount = parseInt(countResult.rows[0].message_count);
+      
+      const FREE_USER_MESSAGE_LIMIT = 20; // Ücretsiz kullanıcılar için günlük 20 mesaj
+      
+      if (dailyMessageCount >= FREE_USER_MESSAGE_LIMIT) {
+        return res.status(403).json({
+          success: false,
+          message: `Günlük mesaj limitinize ulaştınız (${FREE_USER_MESSAGE_LIMIT} mesaj/gün). Premium üyelik ile sınırsız mesaj gönderebilirsiniz.`,
+          requiresPremium: true,
+          limit: FREE_USER_MESSAGE_LIMIT,
+          used: dailyMessageCount
+        });
+      }
+    }
+
     console.log(`Mesaj gönderiliyor - Gönderen: ${senderId}, Oda: ${room}, Alıcı: ${receiverId}`);
 
     // Mesajı veritabanına kaydet
@@ -309,6 +340,37 @@ const sendPrivateMessage = async (req, res) => {
         success: false,
         message: 'Arkadaş ID gerekli'
       });
+    }
+
+    // Premium kontrolü - ücretsiz kullanıcılar için mesaj limiti
+    const Subscription = require('../models/Subscription');
+    const premiumStatus = await Subscription.checkUserPremiumStatus(senderId);
+    
+    if (!premiumStatus.isPremium || !premiumStatus.features['unlimited_messages']) {
+      // Ücretsiz kullanıcılar için günlük mesaj limiti kontrolü
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const messageCountQuery = `
+        SELECT COUNT(*) as message_count
+        FROM messages
+        WHERE sender_id = $1 
+          AND created_at >= $2
+      `;
+      const countResult = await pool.query(messageCountQuery, [senderId, today]);
+      const dailyMessageCount = parseInt(countResult.rows[0].message_count);
+      
+      const FREE_USER_MESSAGE_LIMIT = 20; // Ücretsiz kullanıcılar için günlük 20 mesaj
+      
+      if (dailyMessageCount >= FREE_USER_MESSAGE_LIMIT) {
+        return res.status(403).json({
+          success: false,
+          message: `Günlük mesaj limitinize ulaştınız (${FREE_USER_MESSAGE_LIMIT} mesaj/gün). Premium üyelik ile sınırsız mesaj gönderebilirsiniz.`,
+          requiresPremium: true,
+          limit: FREE_USER_MESSAGE_LIMIT,
+          used: dailyMessageCount
+        });
+      }
     }
 
     console.log(`Özel mesaj gönderiliyor - Gönderen: ${senderId}, Alıcı: ${friendId}`);

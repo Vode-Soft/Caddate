@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
+const { requirePremiumFeature } = require('../middleware/premiumAuth');
 const {
   likeUser,
   unlikeUser,
@@ -16,14 +17,14 @@ router.use(authenticateToken);
 // Kullanıcıyı beğen
 router.post('/like', likeUser);
 
-// Beğeniyi geri al
-router.delete('/unlike/:unlikedUserId', unlikeUser);
+// Beğeniyi geri al (Premium: rewind özelliği)
+router.delete('/unlike/:unlikedUserId', requirePremiumFeature('rewind'), unlikeUser);
 
 // Eşleşme listesini getir (karşılıklı eşleşmeler)
 router.get('/', getMatches);
 
-// Seni beğenenleri getir
-router.get('/likes-received', getLikesReceived);
+// Seni beğenenleri getir (Premium: see_who_liked özelliği)
+router.get('/likes-received', requirePremiumFeature('see_who_liked'), getLikesReceived);
 
 // Eşleşme önerileri getir
 router.get('/suggestions', getSuggestedMatches);

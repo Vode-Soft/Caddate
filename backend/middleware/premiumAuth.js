@@ -58,8 +58,9 @@ const requirePremiumFeature = (featureName) => {
         });
       }
 
-      // Özellik kontrolü
-      if (!premiumStatus.features[featureName]) {
+      // Özellik kontrolü (özellik true olmalı, false veya undefined ise erişim yok)
+      const featureValue = premiumStatus.features[featureName];
+      if (featureValue !== true) {
         return res.status(403).json({
           success: false,
           message: `Bu özellik '${featureName}' premium planınızda mevcut değil`,

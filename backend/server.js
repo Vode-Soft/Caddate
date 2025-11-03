@@ -11,6 +11,14 @@ require('dotenv').config({ path: './config.env' });
 // Import database connection
 const { testConnection, pool, checkConnectionHealth } = require('./config/database');
 
+// Debug: Check database connection
+pool.query('SELECT current_database(), current_schema()').then(res => {
+  console.log('🔍 Server database:', res.rows[0].current_database);
+  console.log('🔍 Server schema:', res.rows[0].current_schema);
+}).catch(err => {
+  console.error('❌ Database connection error:', err.message);
+});
+
 // Import email service
 const emailService = require('./services/emailService');
 

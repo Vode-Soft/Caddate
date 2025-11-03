@@ -18,7 +18,7 @@ router.use(authenticateToken);
 // Mesaj geçmişini getir
 router.get('/history', getMessageHistory);
 
-// Mesaj gönder
+// Mesaj gönder (Premium kontrolü controller'da yapılıyor - ücretsiz kullanıcılar sınırlı mesaj gönderebilir)
 router.post('/send', sendMessage);
 
 // Mesajı okundu olarak işaretle
@@ -31,7 +31,7 @@ router.get('/unread-count', getUnreadCount);
 // Özel mesaj geçmişini getir
 router.get('/private/history', getPrivateMessageHistory);
 
-// Özel mesaj gönder
+// Özel mesaj gönder (Premium kontrolü controller'da yapılıyor - ücretsiz kullanıcılar sınırlı mesaj gönderebilir)
 router.post('/private/send', sendPrivateMessage);
 
 // Özel konuşmaları getir

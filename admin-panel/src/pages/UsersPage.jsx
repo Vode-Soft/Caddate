@@ -35,8 +35,10 @@ import {
   Block as BlockIcon,
   CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
+  Star as StarIcon,
+  StarBorder as StarBorderIcon,
 } from '@mui/icons-material';
-import { usersAPI } from '../services/api';
+import { usersAPI, subscriptionsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 
@@ -52,10 +54,18 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [banDialogOpen, setBanDialogOpen] = useState(false);
   const [banReason, setBanReason] = useState('');
+  const [premiumDialogOpen, setPremiumDialogOpen] = useState(false);
+  const [premiumData, setPremiumData] = useState({
+    planId: '',
+    durationDays: 30,
+    reason: ''
+  });
+  const [plans, setPlans] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchUsers();
+    fetchPlans();
   }, [page, rowsPerPage, search, filter]);
 
   const fetchUsers = async () => {
@@ -75,6 +85,15 @@ export default function UsersPage() {
       toast.error('Kullanıcılar yüklenirken hata oluştu');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPlans = async () => {
+    try {
+      const response = await subscriptionsAPI.getPlans();
+      setPlans(response.data.plans);
+    } catch (error) {
+      console.error('Error fetching plans:', error);
     }
   };
 
@@ -119,6 +138,47 @@ export default function UsersPage() {
       fetchUsers();
     } catch (error) {
       toast.error('Kullanıcı banlanırken hata oluştu');
+    }
+  };
+
+  const handleGivePremium = () => {
+    setPremiumData({
+      planId: plans[0]?.id || '',
+      durationDays: 30,
+      reason: ''
+    });
+    setPremiumDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleRevokePremium = async () => {
+    try {
+      await subscriptionsAPI.revokePremium({
+        userId: selectedUser.id,
+        reason: 'Admin tarafından iptal edildi'
+      });
+      toast.success('Premium üyelik iptal edildi');
+      fetchUsers();
+    } catch (error) {
+      toast.error('Premium üyelik iptal edilirken hata oluştu');
+    }
+    handleMenuClose();
+  };
+
+  const handlePremiumConfirm = async () => {
+    try {
+      await subscriptionsAPI.givePremium({
+        userId: selectedUser.id,
+        planId: premiumData.planId,
+        durationDays: premiumData.durationDays,
+        reason: premiumData.reason
+      });
+      toast.success('Premium üyelik verildi');
+      setPremiumDialogOpen(false);
+      setPremiumData({ planId: '', durationDays: 30, reason: '' });
+      fetchUsers();
+    } catch (error) {
+      toast.error('Premium üyelik verilirken hata oluştu');
     }
   };
 
@@ -287,6 +347,17 @@ export default function UsersPage() {
             </>
           )}
         </MenuItem>
+        {selectedUser?.is_premium ? (
+          <MenuItem onClick={handleRevokePremium}>
+            <StarBorderIcon sx={{ mr: 1 }} />
+            Premium İptal Et
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={handleGivePremium}>
+            <StarIcon sx={{ mr: 1 }} />
+            Premium Ver
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Ban Dialog */}
@@ -310,6 +381,56 @@ export default function UsersPage() {
           <Button onClick={() => setBanDialogOpen(false)}>İptal</Button>
           <Button onClick={handleBanConfirm} variant="contained" color="error">
             Banla
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Premium Dialog */}
+      <Dialog open={premiumDialogOpen} onClose={() => setPremiumDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Premium Üyelik Ver</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 3 }}>
+            {selectedUser?.first_name} {selectedUser?.last_name} kullanıcısına premium üyelik vermek istediğinizden emin misiniz?
+          </DialogContentText>
+          
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Plan Seçin</InputLabel>
+            <Select
+              value={premiumData.planId}
+              onChange={(e) => setPremiumData({ ...premiumData, planId: e.target.value })}
+              label="Plan Seçin"
+            >
+              {plans.map((plan) => (
+                <MenuItem key={plan.id} value={plan.id}>
+                  {plan.name_tr || plan.name} - ₺{plan.price}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            type="number"
+            label="Süre (Gün)"
+            value={premiumData.durationDays}
+            onChange={(e) => setPremiumData({ ...premiumData, durationDays: parseInt(e.target.value) || 30 })}
+            sx={{ mb: 2 }}
+            inputProps={{ min: 1, max: 365 }}
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Sebep (Opsiyonel)"
+            value={premiumData.reason}
+            onChange={(e) => setPremiumData({ ...premiumData, reason: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPremiumDialogOpen(false)}>İptal</Button>
+          <Button onClick={handlePremiumConfirm} variant="contained" color="primary">
+            Premium Ver
           </Button>
         </DialogActions>
       </Dialog>

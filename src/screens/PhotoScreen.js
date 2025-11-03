@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -81,13 +82,11 @@ export default function PhotoScreen() {
         setPhotos(response.data.photos);
       } else {
         console.error('Fotoğraf yükleme hatası:', response.message);
-        // Fallback olarak mock data kullan
-        setPhotos(getMockPhotos());
+        setPhotos([]);
       }
     } catch (error) {
       console.error('API fotoğraf yükleme hatası:', error);
-      // Fallback olarak mock data kullan
-      setPhotos(getMockPhotos());
+      setPhotos([]);
     } finally {
       setLoading(false);
     }
@@ -393,10 +392,18 @@ export default function PhotoScreen() {
     );
   };
 
-  const openPhotoModal = (photo) => {
+  const openPhotoModal = async (photo, showCommentsImmediately = false) => {
     console.log('Modal açılıyor:', photo);
     setSelectedPhoto(photo);
     setShowPhotoModal(true);
+    
+    // Eğer yorumları hemen göstermek istiyorsak
+    if (showCommentsImmediately) {
+      // State'ler set edildikten sonra bekle
+      setTimeout(async () => {
+        await toggleComments();
+      }, 100);
+    }
   };
 
   const closePhotoModal = () => {
@@ -548,12 +555,15 @@ export default function PhotoScreen() {
 
   const renderPhoto = ({ item }) => {
     return (
-      <TouchableOpacity 
-        style={styles.photoCard}
-        onPress={() => openPhotoModal(item)}
-        activeOpacity={0.9}
-      >
-        <Image source={{ uri: item.uri }} style={styles.photo} />
+      <View style={styles.photoCard}>
+        <TouchableOpacity 
+          onPress={() => openPhotoModal(item)}
+          activeOpacity={0.9}
+          style={styles.photoTouchable}
+        >
+          <Image source={{ uri: item.uri }} style={styles.photo} />
+        </TouchableOpacity>
+        
         <View style={styles.photoOverlay}>
           <View style={styles.photoHeader}>
             <View style={styles.userInfo}>
@@ -580,7 +590,10 @@ export default function PhotoScreen() {
             <View style={styles.actions}>
               <TouchableOpacity 
                 style={[styles.actionButton, item.isLiked && styles.likedButton]}
-                onPress={() => likePhoto(item.id)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  likePhoto(item.id);
+                }}
                 activeOpacity={0.7}
               >
                 <Ionicons 
@@ -593,18 +606,26 @@ export default function PhotoScreen() {
                 </Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-              <Ionicons name="chatbubble-outline" size={scale(18)} color={colors.text.light} />
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                activeOpacity={0.7}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  // Modal aç ve yorumları hemen göster
+                  openPhotoModal(item, true);
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={scale(18)} color={colors.text.light} />
                 <Text style={styles.actionText}>{item.comments || 0}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-              <Ionicons name="share-outline" size={scale(18)} color={colors.text.light} />
+                <Ionicons name="share-outline" size={scale(18)} color={colors.text.light} />
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -766,64 +787,70 @@ export default function PhotoScreen() {
             
             {/* Yorumlar Bölümü */}
             {showComments && (
-              <View style={styles.photoModalComments}>
-                <View style={styles.photoModalCommentsHeader}>
-                  <Text style={styles.photoModalCommentsTitle}>
-                    Yorumlar ({comments.length})
-                  </Text>
-                  <TouchableOpacity onPress={toggleComments}>
-                  <Ionicons name="close" size={scale(20)} color={colors.text.light} />
-                  </TouchableOpacity>
-                </View>
-                
-                <ScrollView style={styles.photoModalCommentsList}>
-                  {comments.map((comment) => (
-                    <View key={comment.id} style={styles.photoModalCommentItem}>
-                      <View style={styles.photoModalCommentAvatar}>
-                        <Text style={styles.photoModalCommentAvatarText}>{comment.avatar}</Text>
-                      </View>
-                      <View style={styles.photoModalCommentContent}>
-                        <View style={styles.photoModalCommentHeader}>
-                          <Text style={styles.photoModalCommentUser}>{comment.user}</Text>
-                          <Text style={styles.photoModalCommentTime}>{comment.time}</Text>
+              <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.photoModalCommentsWrapper}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+              >
+                <View style={styles.photoModalComments}>
+                  <View style={styles.photoModalCommentsHeader}>
+                    <Text style={styles.photoModalCommentsTitle}>
+                      Yorumlar ({comments.length})
+                    </Text>
+                    <TouchableOpacity onPress={toggleComments}>
+                    <Ionicons name="close" size={scale(20)} color={colors.text.light} />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <ScrollView style={styles.photoModalCommentsList}>
+                    {comments.map((comment) => (
+                      <View key={comment.id} style={styles.photoModalCommentItem}>
+                        <View style={styles.photoModalCommentAvatar}>
+                          <Text style={styles.photoModalCommentAvatarText}>{comment.avatar}</Text>
                         </View>
-                        <Text style={styles.photoModalCommentText}>{comment.text}</Text>
+                        <View style={styles.photoModalCommentContent}>
+                          <View style={styles.photoModalCommentHeader}>
+                            <Text style={styles.photoModalCommentUser}>{comment.user}</Text>
+                            <Text style={styles.photoModalCommentTime}>{comment.time}</Text>
+                          </View>
+                          <Text style={styles.photoModalCommentText}>{comment.text}</Text>
+                        </View>
                       </View>
-                    </View>
-                  ))}
-                </ScrollView>
-                
-                <View style={styles.photoModalCommentInput}>
-                  <TextInput
-                    style={styles.photoModalCommentTextInput}
-                    placeholder="Yorum yazın..."
-                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                    value={newComment}
-                    onChangeText={setNewComment}
-                    multiline
-                    maxLength={200}
-                  />
-                  <TouchableOpacity 
-                    style={[
-                      styles.photoModalCommentSendButton,
-                      !newComment.trim() && styles.photoModalCommentSendButtonDisabled
-                    ]}
-                    onPress={() => {
-                      console.log('Send button pressed, newComment:', newComment);
-                      addComment();
-                    }}
-                    disabled={!newComment.trim()}
-                    activeOpacity={newComment.trim() ? 0.7 : 1}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons 
-                      name="send" 
-                      size={scale(20)} 
-                      color={newComment.trim() ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)"} 
+                    ))}
+                  </ScrollView>
+                  
+                  <View style={styles.photoModalCommentInput}>
+                    <TextInput
+                      style={styles.photoModalCommentTextInput}
+                      placeholder="Yorum yazın..."
+                      placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                      value={newComment}
+                      onChangeText={setNewComment}
+                      multiline
+                      maxLength={200}
                     />
-                  </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[
+                        styles.photoModalCommentSendButton,
+                        !newComment.trim() && styles.photoModalCommentSendButtonDisabled
+                      ]}
+                      onPress={() => {
+                        console.log('Send button pressed, newComment:', newComment);
+                        addComment();
+                      }}
+                      disabled={!newComment.trim()}
+                      activeOpacity={newComment.trim() ? 0.7 : 1}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons 
+                        name="send" 
+                        size={scale(20)} 
+                        color={newComment.trim() ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)"} 
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
+              </KeyboardAvoidingView>
             )}
           </View>
         )}
@@ -886,9 +913,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.light + '30',
   },
-  photo: {
+  photoTouchable: {
     width: '100%',
     height: verticalScale(isTablet ? 280 : 220),
+  },
+  photo: {
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
   },
   photoOverlay: {
@@ -1216,21 +1247,23 @@ const styles = StyleSheet.create({
     color: '#4ECDC4',
   },
   // Yorumlar Stilleri
-  photoModalComments: {
+  photoModalCommentsWrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 3001,
+  },
+  photoModalComments: {
     backgroundColor: 'rgba(15, 15, 15, 0.98)',
     maxHeight: verticalScale(350),
-    zIndex: 3001,
     borderTopLeftRadius: scale(25),
     borderTopRightRadius: scale(25),
     borderTopWidth: 2,
     borderTopColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: scale(20),
     paddingTop: scale(20),
-    paddingBottom: getBottomSafeArea() + scale(100),
+    paddingBottom: getBottomSafeArea() + scale(20),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.3,

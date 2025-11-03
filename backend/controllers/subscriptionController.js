@@ -3,7 +3,9 @@ const Subscription = require('../models/Subscription');
 // Abonelik planlarını listele
 exports.getPlans = async (req, res) => {
   try {
+    console.log('getPlans controller called');
     const plans = await Subscription.getPlans();
+    console.log('Plans retrieved in controller:', plans.length);
     
     res.json({
       success: true,
@@ -13,7 +15,8 @@ exports.getPlans = async (req, res) => {
     console.error('Get plans error:', error);
     res.status(500).json({
       success: false,
-      message: 'Planlar yüklenirken hata oluştu'
+      message: 'Planlar yüklenirken hata oluştu',
+      error: error.message
     });
   }
 };
@@ -207,6 +210,81 @@ exports.getSubscriptionStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'İstatistikler yüklenirken hata oluştu'
+    });
+  }
+};
+
+// ADMIN: Kullanıcıya premium üyelik ver
+exports.givePremiumToUser = async (req, res) => {
+  try {
+    const { userId, planId, durationDays, reason } = req.body;
+    
+    if (!userId || !planId || !durationDays) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID, plan ID ve süre gerekli'
+      });
+    }
+
+    // Plan bilgilerini al
+    const plan = await Subscription.getPlanById(planId);
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan bulunamadı'
+      });
+    }
+
+    // Admin tarafından premium ver
+    const subscription = await Subscription.giveAdminPremium(
+      userId,
+      planId,
+      durationDays,
+      reason || 'Admin tarafından verildi'
+    );
+    
+    res.json({
+      success: true,
+      message: 'Premium üyelik başarıyla verildi',
+      subscription
+    });
+  } catch (error) {
+    console.error('Give premium to user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Premium üyelik verilirken hata oluştu'
+    });
+  }
+};
+
+// ADMIN: Kullanıcının premium üyeliğini iptal et
+exports.revokePremiumFromUser = async (req, res) => {
+  try {
+    const { userId, reason } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID gerekli'
+      });
+    }
+
+    // Admin tarafından premium iptal et
+    const result = await Subscription.revokeAdminPremium(
+      userId,
+      reason || 'Admin tarafından iptal edildi'
+    );
+    
+    res.json({
+      success: true,
+      message: 'Premium üyelik başarıyla iptal edildi',
+      result
+    });
+  } catch (error) {
+    console.error('Revoke premium from user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Premium üyelik iptal edilirken hata oluştu'
     });
   }
 };

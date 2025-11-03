@@ -1,0 +1,12 @@
+-- Örnek abonelik planları ekle
+-- NOT: Bu dosya addSubscriptionTables.js ile tutarlı hale getirilmiştir
+-- Ana script: backend/scripts/addSubscriptionTables.js
+-- Eğer manuel SQL çalıştırıyorsanız, bu dosyayı kullanabilirsiniz
+
+INSERT INTO subscription_plans (name, name_tr, description, description_tr, price, currency, duration_days, features, is_active, is_popular, display_order) VALUES
+('Basic Premium', 'Temel Premium', 'Essential features for casual users', 'Günlük kullanıcılar için temel özellikler', 49.90, 'TRY', 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": false, "unlimited_swipes": true, "rewind": false, "passport": false, "boost_per_month": 1}', true, false, 1),
+('Gold Premium', 'Altın Premium', 'Advanced features for power users', 'Aktif kullanıcılar için gelişmiş özellikler', 99.90, 'TRY', 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": false, "boost_per_month": 3, "super_like_per_day": 5, "priority_support": true}', true, true, 2),
+('Platinum Premium', 'Platin Premium', 'All features unlocked', 'Tüm özellikler açık', 149.90, 'TRY', 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": true, "boost_per_month": 10, "super_like_per_day": 10, "priority_support": true, "message_before_match": true, "priority_likes": true, "exclusive_badge": true}', true, false, 3),
+('3 Month Gold', '3 Aylık Altın', '3 months of Gold Premium with discount', '3 ay Altın Premium indirimli', 249.90, 'TRY', 90, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": false, "boost_per_month": 3, "super_like_per_day": 5, "priority_support": true}', true, false, 4),
+('6 Month Platinum', '6 Aylık Platin', '6 months of Platinum Premium - Best Value', '6 ay Platin Premium - En Avantajlı', 699.90, 'TRY', 180, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": true, "boost_per_month": 10, "super_like_per_day": 10, "priority_support": true, "message_before_match": true, "priority_likes": true, "exclusive_badge": true}', true, false, 5)
+ON CONFLICT DO NOTHING;

@@ -90,6 +90,8 @@ export const subscriptionsAPI = {
   getAll: (params) => api.get('/subscriptions/admin/all', { params }),
   getStats: () => api.get('/subscriptions/admin/stats'),
   getPlans: () => api.get('/subscriptions/plans'),
+  givePremium: (data) => api.post('/subscriptions/admin/give-premium', data),
+  revokePremium: (data) => api.post('/subscriptions/admin/revoke-premium', data),
 };
 
 // Support API

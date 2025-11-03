@@ -357,6 +357,122 @@ class Subscription {
       throw error;
     }
   }
+
+  // ADMIN: Kullanıcıya premium üyelik ver
+  static async giveAdminPremium(userId, planId, durationDays, reason = 'Admin tarafından verildi') {
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Plan bilgilerini al
+      const planQuery = 'SELECT * FROM subscription_plans WHERE id = $1';
+      const planResult = await client.query(planQuery, [planId]);
+      
+      if (planResult.rows.length === 0) {
+        throw new Error('Plan bulunamadı');
+      }
+
+      const plan = planResult.rows[0];
+      const startDate = new Date();
+      const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+      // Önceki aktif abonelikleri iptal et
+      const cancelQuery = `
+        UPDATE user_subscriptions 
+        SET status = 'cancelled', cancelled_at = NOW(), cancelled_reason = 'Admin tarafından yeni abonelik verildi'
+        WHERE user_id = $1 AND status = 'active' AND end_date > NOW()
+      `;
+      await client.query(cancelQuery, [userId]);
+
+      // Yeni admin aboneliği oluştur
+      const subscriptionQuery = `
+        INSERT INTO user_subscriptions 
+          (user_id, plan_id, status, start_date, end_date, payment_method, transaction_id, amount_paid, currency, is_admin_given)
+        VALUES ($1, $2, 'active', $3, $4, 'admin', 'admin-' || $1 || '-' || EXTRACT(EPOCH FROM NOW()), 0, $5, true)
+        RETURNING *
+      `;
+      
+      const subscriptionResult = await client.query(subscriptionQuery, [
+        userId, planId, startDate, endDate, plan.currency
+      ]);
+
+      const subscription = subscriptionResult.rows[0];
+
+      // Ödeme geçmişine ekle (admin verdiği için 0 tutar)
+      const paymentQuery = `
+        INSERT INTO payment_history 
+          (user_id, subscription_id, plan_id, amount, currency, status, payment_method, transaction_id, payment_gateway, is_admin_given)
+        VALUES ($1, $2, $3, 0, $4, 'completed', 'admin', 'admin-' || $1 || '-' || EXTRACT(EPOCH FROM NOW()), 'admin', true)
+        RETURNING *
+      `;
+      
+      await client.query(paymentQuery, [
+        userId, subscription.id, planId, plan.currency
+      ]);
+
+      // Users tablosunu güncelle
+      const updateUserQuery = `
+        UPDATE users 
+        SET is_premium = true, premium_until = $1, premium_features = $2
+        WHERE id = $3
+      `;
+      
+      await client.query(updateUserQuery, [endDate, plan.features, userId]);
+
+      await client.query('COMMIT');
+      
+      return subscription;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error giving admin premium:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ADMIN: Kullanıcının premium üyeliğini iptal et
+  static async revokeAdminPremium(userId, reason = 'Admin tarafından iptal edildi') {
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Aktif abonelikleri iptal et
+      const cancelQuery = `
+        UPDATE user_subscriptions 
+        SET status = 'cancelled', cancelled_at = NOW(), cancelled_reason = $1
+        WHERE user_id = $2 AND status = 'active' AND end_date > NOW()
+        RETURNING *
+      `;
+      
+      const result = await client.query(cancelQuery, [reason, userId]);
+      const cancelledSubscriptions = result.rows;
+
+      // Kullanıcının premium durumunu güncelle
+      const updateUserQuery = `
+        UPDATE users 
+        SET is_premium = false, premium_until = NULL, premium_features = '{}'
+        WHERE id = $1
+      `;
+      
+      await client.query(updateUserQuery, [userId]);
+
+      await client.query('COMMIT');
+      
+      return {
+        cancelledSubscriptions: cancelledSubscriptions.length,
+        message: `${cancelledSubscriptions.length} abonelik iptal edildi`
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error revoking admin premium:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 module.exports = Subscription;

@@ -267,6 +267,77 @@ CREATE TABLE IF NOT EXISTS location_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Abonelik planları tablosu
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    name_tr VARCHAR(100),
+    description TEXT,
+    description_tr TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'TRY',
+    duration_days INTEGER NOT NULL,
+    features JSONB DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    display_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Kullanıcı abonelikleri tablosu
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    plan_id INTEGER REFERENCES subscription_plans(id),
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'expired', 'pending', 'failed')),
+    start_date TIMESTAMP NOT NULL,
+    end_date TIMESTAMP NOT NULL,
+    payment_method VARCHAR(50),
+    transaction_id VARCHAR(255),
+    amount_paid DECIMAL(10, 2) DEFAULT 0,
+    currency VARCHAR(3) DEFAULT 'TRY',
+    auto_renew BOOLEAN DEFAULT true,
+    cancelled_at TIMESTAMP,
+    cancelled_reason TEXT,
+    is_admin_given BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ödeme geçmişi tablosu
+CREATE TABLE IF NOT EXISTS payment_history (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    subscription_id INTEGER REFERENCES user_subscriptions(id),
+    plan_id INTEGER REFERENCES subscription_plans(id),
+    amount DECIMAL(10, 2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'TRY',
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+    payment_method VARCHAR(50),
+    transaction_id VARCHAR(255),
+    payment_gateway VARCHAR(50),
+    gateway_response JSONB,
+    is_admin_given BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Özellik kullanımı tablosu
+CREATE TABLE IF NOT EXISTS feature_usage (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    feature_name VARCHAR(100) NOT NULL,
+    usage_count INTEGER DEFAULT 1,
+    last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, feature_name)
+);
+
+-- Users tablosuna premium alanları ekle
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_until TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_features JSONB DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin'));
+
 -- Indexler
 CREATE INDEX IF NOT EXISTS idx_profile_visits_visitor ON profile_visits(visitor_id);
 CREATE INDEX IF NOT EXISTS idx_profile_visits_profile ON profile_visits(profile_id);
@@ -277,3 +348,13 @@ CREATE INDEX IF NOT EXISTS idx_follows_created_at ON follows(created_at);
 CREATE INDEX IF NOT EXISTS idx_location_history_user ON location_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_location_history_created_at ON location_history(created_at);
 CREATE INDEX IF NOT EXISTS idx_location_history_location ON location_history(latitude, longitude);
+
+-- Subscription indexleri
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan ON user_subscriptions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_end_date ON user_subscriptions(end_date);
+CREATE INDEX IF NOT EXISTS idx_payment_history_user ON payment_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_history_subscription ON payment_history(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_feature_usage_user ON feature_usage(user_id);
+CREATE INDEX IF NOT EXISTS idx_feature_usage_feature ON feature_usage(feature_name);

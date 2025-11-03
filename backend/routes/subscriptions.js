@@ -5,7 +5,10 @@ const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/adminAuth');
 
 // Kullanıcı route'ları - kimlik doğrulama gerekli
-router.get('/plans', subscriptionController.getPlans);
+router.get('/plans', (req, res) => {
+  console.log('Plans route called');
+  subscriptionController.getPlans(req, res);
+});
 router.get('/my-subscription', authenticateToken, subscriptionController.getUserSubscription);
 router.get('/history', authenticateToken, subscriptionController.getSubscriptionHistory);
 router.post('/create', authenticateToken, subscriptionController.createSubscription);
@@ -16,6 +19,8 @@ router.get('/premium-status', authenticateToken, subscriptionController.checkPre
 // Admin route'ları - admin yetkisi gerekli
 router.get('/admin/all', authenticateToken, requireAdmin, subscriptionController.getAllSubscriptions);
 router.get('/admin/stats', authenticateToken, requireAdmin, subscriptionController.getSubscriptionStats);
+router.post('/admin/give-premium', authenticateToken, requireAdmin, subscriptionController.givePremiumToUser);
+router.post('/admin/revoke-premium', authenticateToken, requireAdmin, subscriptionController.revokePremiumFromUser);
 
 module.exports = router;
 
