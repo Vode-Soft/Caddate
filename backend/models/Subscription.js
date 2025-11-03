@@ -224,6 +224,10 @@ class Subscription {
   // Kullanıcının premium durumunu kontrol et
   static async checkUserPremiumStatus(userId) {
     try {
+      if (!userId) {
+        throw new Error('Kullanıcı ID gerekli');
+      }
+
       const query = `
         SELECT 
           is_premium,
@@ -244,7 +248,7 @@ class Subscription {
       if (user.is_premium && user.premium_until && new Date(user.premium_until) < new Date()) {
         const updateQuery = `
           UPDATE users 
-          SET is_premium = false, premium_until = NULL, premium_features = '{}'
+          SET is_premium = false, premium_until = NULL, premium_features = '{}'::jsonb
           WHERE id = $1
         `;
         await pool.query(updateQuery, [userId]);
@@ -252,13 +256,35 @@ class Subscription {
         return { isPremium: false, premiumUntil: null, features: {} };
       }
 
+      // premium_features'i güvenli şekilde işle
+      let features = {};
+      if (user.premium_features) {
+        if (typeof user.premium_features === 'string') {
+          try {
+            features = JSON.parse(user.premium_features);
+          } catch (parseError) {
+            console.error('Error parsing premium_features:', parseError);
+            features = {};
+          }
+        } else if (typeof user.premium_features === 'object') {
+          features = user.premium_features;
+        }
+      }
+
       return {
         isPremium: user.is_premium || false,
         premiumUntil: user.premium_until,
-        features: user.premium_features || {}
+        features: features
       };
     } catch (error) {
       console.error('Error checking user premium status:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack
+      });
       throw error;
     }
   }

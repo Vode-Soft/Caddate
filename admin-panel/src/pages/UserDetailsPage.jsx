@@ -34,6 +34,7 @@ export default function UserDetailsPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [subscription, setSubscription] = useState(null);
+  const [premiumStatus, setPremiumStatus] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [securityHistory, setSecurityHistory] = useState([]);
@@ -53,6 +54,7 @@ export default function UserDetailsPage() {
       
       setUser(data.user);
       setSubscription(data.subscription);
+      setPremiumStatus(data.premiumStatus);
       setVehicles(data.vehicles || []);
       setPhotos(data.photos || []);
       setSecurityHistory(data.securityHistory || []);
@@ -266,6 +268,50 @@ export default function UserDetailsPage() {
               </Box>
             </Paper>
           )}
+          {/* Premium Durumu */}
+          {premiumStatus && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+                Premium Durumu
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Premium Durumu</Typography>
+                  {premiumStatus.isPremium ? (
+                    <Chip label="Premium Aktif" color="warning" size="small" sx={{ mt: 0.5 }} />
+                  ) : (
+                    <Chip label="Free" variant="outlined" size="small" sx={{ mt: 0.5 }} />
+                  )}
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Premium Bitiş Tarihi</Typography>
+                  <Typography variant="body1" sx={{ mt: 0.5 }}>
+                    {premiumStatus.premiumUntil 
+                      ? format(new Date(premiumStatus.premiumUntil), 'dd/MM/yyyy HH:mm')
+                      : '-'}
+                  </Typography>
+                </Grid>
+                {premiumStatus.features && Object.keys(premiumStatus.features).length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Premium Özellikler</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {Object.entries(premiumStatus.features).map(([feature, enabled]) => (
+                        enabled && (
+                          <Chip
+                            key={feature}
+                            label={feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            color="primary"
+                            size="small"
+                          />
+                        )
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
+            </Paper>
+          )}
+
           {/* Abonelik Bilgileri */}
           {subscription && (
             <Paper sx={{ p: 3, mb: 3 }}>

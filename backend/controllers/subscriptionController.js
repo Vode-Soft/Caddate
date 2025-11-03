@@ -6,6 +6,16 @@ exports.getPlans = async (req, res) => {
     console.log('getPlans controller called');
     const plans = await Subscription.getPlans();
     console.log('Plans retrieved in controller:', plans.length);
+    console.log('Plans data:', JSON.stringify(plans, null, 2));
+    
+    if (!plans || plans.length === 0) {
+      console.warn('⚠️  No plans found in database');
+      return res.json({
+        success: true,
+        plans: [],
+        message: 'Henüz plan bulunmamaktadır'
+      });
+    }
     
     res.json({
       success: true,
@@ -13,10 +23,12 @@ exports.getPlans = async (req, res) => {
     });
   } catch (error) {
     console.error('Get plans error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Planlar yüklenirken hata oluştu',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      plans: []
     });
   }
 };
@@ -155,6 +167,13 @@ exports.checkPremiumStatus = async (req, res) => {
   try {
     const userId = req.user.id;
     
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
+    
     const premiumStatus = await Subscription.checkUserPremiumStatus(userId);
     
     res.json({
@@ -163,9 +182,18 @@ exports.checkPremiumStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Check premium status error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint
+    });
+    
     res.status(500).json({
       success: false,
-      message: 'Premium durumu kontrol edilirken hata oluştu'
+      message: 'Premium durumu kontrol edilirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

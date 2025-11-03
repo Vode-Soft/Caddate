@@ -286,6 +286,20 @@ exports.getUserDetails = async (req, res) => {
       console.log('⚠️  Abonelik tablosu bulunamadı');
     }
 
+    // Premium durumu (detaylı bilgi)
+    let premiumStatus = null;
+    try {
+      premiumStatus = await Subscription.checkUserPremiumStatus(userId);
+    } catch (error) {
+      console.error('⚠️  Premium durumu kontrol edilemedi:', error.message);
+      // Hata durumunda varsayılan değer
+      premiumStatus = {
+        isPremium: user.is_premium || false,
+        premiumUntil: user.premium_until || null,
+        features: {}
+      };
+    }
+
     // Araçlar
     let vehicles = [];
     try {
@@ -399,6 +413,7 @@ exports.getUserDetails = async (req, res) => {
         is_premium: user.is_premium || false
       },
       subscription,
+      premiumStatus,
       vehicles,
       photos,
       securityHistory,

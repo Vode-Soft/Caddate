@@ -355,15 +355,9 @@ export default function SettingsScreen({ navigation }) {
     navigation.navigate('Security');
   };
 
-  // Abonelik planını göster
+  // Abonelik planını göster - Doğrudan Subscription sayfasına yönlendir
   const showSubscriptionPlan = () => {
-    Alert.alert(
-      'Abonelik Planım',
-      'Şu anda ücretsiz plandasınız.\n\nPremium özellikler yakında eklenecek.',
-      [
-        { text: 'Tamam', style: 'default' }
-      ]
-    );
+    navigation.navigate('Subscription');
   };
 
   // Yardım ve destek

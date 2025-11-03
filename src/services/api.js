@@ -88,6 +88,178 @@ class ApiService {
     this.token = null;
   }
 
+  // Abonelik API metodları
+  async getSubscriptionPlans() {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/plans`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Get subscription plans error response:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Get subscription plans response:', data);
+      
+      // Response formatını kontrol et
+      if (data.success && data.plans) {
+        return data;
+      } else if (data.plans) {
+        // Eğer plans direkt döndüyse
+        return { success: true, plans: data.plans };
+      } else {
+        console.error('Unexpected response format:', data);
+        return { success: false, plans: [], message: 'Beklenmeyen yanıt formatı' };
+      }
+    } catch (error) {
+      console.error('Get subscription plans error:', error);
+      // Hata durumunda boş planlar döndür
+      return { success: false, plans: [], message: error.message || 'Planlar yüklenirken hata oluştu' };
+    }
+  }
+
+  async getMySubscription() {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/my-subscription`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Get my subscription error response:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Get my subscription response:', data);
+      return data;
+    } catch (error) {
+      console.error('Get my subscription error:', error);
+      throw error;
+    }
+  }
+
+  async getPremiumStatus() {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/premium-status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Get premium status error response:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Get premium status response:', data);
+      return data;
+    } catch (error) {
+      console.error('Get premium status error:', error);
+      throw error;
+    }
+  }
+
+  async getSubscriptionHistory() {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/history`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Get subscription history error:', error);
+      throw error;
+    }
+  }
+
+  async createSubscription(planId, paymentMethod = 'test', transactionId = null, amountPaid = null) {
+    try {
+      // Eğer transactionId ve amountPaid verilmemişse, plan bilgilerini al
+      if (!transactionId || !amountPaid) {
+        const plansResponse = await this.getSubscriptionPlans();
+        if (plansResponse.success && plansResponse.plans) {
+          const plan = plansResponse.plans.find(p => p.id === planId);
+          if (plan) {
+            transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            amountPaid = parseFloat(plan.price);
+          }
+        }
+      }
+
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          planId,
+          paymentMethod,
+          transactionId,
+          amountPaid
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Create subscription error response:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Create subscription response:', data);
+      return data;
+    } catch (error) {
+      console.error('Create subscription error:', error);
+      throw error;
+    }
+  }
+
+  async cancelSubscription(subscriptionId, reason = '') {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/subscriptions/cancel/${subscriptionId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Cancel subscription error response:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Cancel subscription error:', error);
+      throw error;
+    }
+  }
+
   // Base URL'i al
   getBaseURL() {
     return this.baseURL;
