@@ -24,6 +24,24 @@ exports.getPlans = async (req, res) => {
   } catch (error) {
     console.error('Get plans error:', error);
     console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint
+    });
+    
+    // Veritabanı hatası ise özel mesaj
+    if (error.code === '42P01') { // Table does not exist
+      console.error('❌ subscription_plans tablosu bulunamadı!');
+      return res.status(500).json({
+        success: false,
+        message: 'Planlar tablosu bulunamadı. Lütfen veritabanı migrasyonunu çalıştırın.',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        plans: []
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Planlar yüklenirken hata oluştu',

@@ -4,16 +4,108 @@ class Subscription {
   // Abonelik planlarını getir
   static async getPlans(activeOnly = true) {
     try {
-      let query = `
-        SELECT * FROM subscription_plans
-        ${activeOnly ? 'WHERE is_active = true' : ''}
-        ORDER BY display_order ASC, price ASC
-      `;
+      // Önce tabloyu sorgulamayı dene, yoksa oluştur
+      let result;
+      try {
+        let query = `
+          SELECT * FROM subscription_plans
+          ${activeOnly ? 'WHERE is_active = true' : ''}
+          ORDER BY display_order ASC, price ASC
+        `;
+        result = await pool.query(query);
+      } catch (queryError) {
+        // Eğer tablo yoksa (42P01 hatası), tabloyu oluştur
+        if (queryError.code === '42P01') {
+          console.warn('⚠️  subscription_plans tablosu bulunamadı, oluşturuluyor...');
+          
+          // Tabloyu oluştur
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS subscription_plans (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              name_tr VARCHAR(100) NOT NULL,
+              description TEXT,
+              description_tr TEXT,
+              price DECIMAL(10, 2) NOT NULL,
+              currency VARCHAR(3) DEFAULT 'TRY',
+              duration_days INTEGER NOT NULL,
+              features JSONB DEFAULT '{}',
+              is_active BOOLEAN DEFAULT true,
+              is_popular BOOLEAN DEFAULT false,
+              display_order INTEGER DEFAULT 0,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+          `);
+          console.log('✅ subscription_plans tablosu oluşturuldu');
+          
+          // Örnek planları ekle
+          try {
+            await pool.query(`
+              INSERT INTO subscription_plans (name, name_tr, description, description_tr, price, duration_days, features, is_popular, display_order)
+              VALUES 
+                ('Basic Premium', 'Temel Premium', 'Essential features', 'Günlük kullanıcılar için temel özellikler', 49.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "unlimited_swipes": true}'::jsonb, false, 1),
+                ('Gold Premium', 'Altın Premium', 'Advanced features', 'Aktif kullanıcılar için gelişmiş özellikler', 99.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "boost_per_month": 3}'::jsonb, true, 2),
+                ('Platinum Premium', 'Platin Premium', 'All features', 'Tüm özellikler açık', 149.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": true, "boost_per_month": 10}'::jsonb, false, 3);
+            `);
+            console.log('✅ Örnek planlar eklendi');
+            
+            // Tekrar sorgula
+            let retryQuery = `
+              SELECT * FROM subscription_plans
+              ${activeOnly ? 'WHERE is_active = true' : ''}
+              ORDER BY display_order ASC, price ASC
+            `;
+            result = await pool.query(retryQuery);
+          } catch (insertError) {
+            console.error('❌ Örnek planlar eklenirken hata:', insertError.message);
+            // Tablo oluşturuldu ama planlar eklenemedi, boş döndür
+            return [];
+          }
+        } else {
+          // Başka bir hata, yukarı fırlat
+          throw queryError;
+        }
+      }
       
-      const result = await pool.query(query);
+      // Eğer plan yoksa ve activeOnly true ise, örnek planlar ekle
+      if (result.rows.length === 0 && activeOnly) {
+        console.warn('⚠️  Hiç plan bulunamadı, örnek planlar ekleniyor...');
+        try {
+          await pool.query(`
+            INSERT INTO subscription_plans (name, name_tr, description, description_tr, price, duration_days, features, is_popular, display_order)
+            VALUES 
+              ('Basic Premium', 'Temel Premium', 'Essential features', 'Günlük kullanıcılar için temel özellikler', 49.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "unlimited_swipes": true}'::jsonb, false, 1),
+              ('Gold Premium', 'Altın Premium', 'Advanced features', 'Aktif kullanıcılar için gelişmiş özellikler', 99.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "boost_per_month": 3}'::jsonb, true, 2),
+              ('Platinum Premium', 'Platin Premium', 'All features', 'Tüm özellikler açık', 149.90, 30, '{"unlimited_messages": true, "profile_boost": true, "hide_ads": true, "see_who_liked": true, "unlimited_swipes": true, "rewind": true, "passport": true, "boost_per_month": 10}'::jsonb, false, 3)
+            ON CONFLICT DO NOTHING;
+          `);
+          console.log('✅ Örnek planlar eklendi, tekrar sorgulanıyor...');
+          // Tekrar sorgula
+          let retryQuery = `
+            SELECT * FROM subscription_plans
+            ${activeOnly ? 'WHERE is_active = true' : ''}
+            ORDER BY display_order ASC, price ASC
+          `;
+          result = await pool.query(retryQuery);
+        } catch (insertError) {
+          console.error('❌ Örnek planlar eklenirken hata:', insertError.message);
+          // Hata olsa bile boş array döndür
+          return [];
+        }
+      }
+      
+      console.log(`✅ ${result.rows.length} plan bulundu`);
       return result.rows;
     } catch (error) {
       console.error('Error getting subscription plans:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack
+      });
       throw error;
     }
   }
@@ -52,6 +144,11 @@ class Subscription {
       const result = await pool.query(query, [userId]);
       return result.rows[0];
     } catch (error) {
+      // Eğer tablo yoksa (42P01), null döndür (hata fırlatma)
+      if (error.code === '42P01') {
+        console.warn('⚠️  user_subscriptions tablosu bulunamadı, null döndürülüyor');
+        return null;
+      }
       console.error('Error getting user active subscription:', error);
       throw error;
     }

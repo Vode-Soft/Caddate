@@ -513,18 +513,7 @@ export default function SettingsScreen({ navigation }) {
               
                <Text style={styles.headerTitle}>Ayarlar</Text>
                
-               <View style={styles.headerRight}>
-                 <View style={[
-                   styles.connectionIndicator, 
-                   { backgroundColor: socketConnected ? colors.success : colors.warning }
-                 ]}>
-                   <Ionicons 
-                     name={socketConnected ? 'wifi' : 'wifi-outline'} 
-                     size={16} 
-                     color="#FFFFFF" 
-                   />
-                 </View>
-               </View>
+               <View style={styles.placeholder} />
             </View>
           </LinearGradient>
 
