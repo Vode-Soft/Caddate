@@ -132,15 +132,45 @@ class User {
 
   // Kullanıcı ayarlarını güncelle
   static async updateSettings(id, settingsData) {
-    const query = `
-      UPDATE users 
-      SET settings = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING id, email, first_name, last_name, settings, updated_at
-    `;
+    // Privacy ayarlarını ayrı bir kolon olarak güncelle
+    const { privacy, ...otherSettings } = settingsData;
+    
+    let query;
+    let values;
+    
+    if (privacy !== undefined) {
+      // Hem settings hem privacy güncelleniyor
+      if (Object.keys(otherSettings).length > 0) {
+        query = `
+          UPDATE users 
+          SET settings = $1, privacy = $2, updated_at = NOW()
+          WHERE id = $3
+          RETURNING id, email, first_name, last_name, settings, privacy, updated_at
+        `;
+        values = [JSON.stringify(otherSettings), JSON.stringify(privacy), id];
+      } else {
+        // Sadece privacy güncelleniyor
+        query = `
+          UPDATE users 
+          SET privacy = $1, updated_at = NOW()
+          WHERE id = $2
+          RETURNING id, email, first_name, last_name, settings, privacy, updated_at
+        `;
+        values = [JSON.stringify(privacy), id];
+      }
+    } else {
+      // Sadece settings güncelleniyor
+      query = `
+        UPDATE users 
+        SET settings = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, email, first_name, last_name, settings, privacy, updated_at
+      `;
+      values = [JSON.stringify(otherSettings), id];
+    }
     
     try {
-      const result = await pool.query(query, [JSON.stringify(settingsData), id]);
+      const result = await pool.query(query, values);
       return result.rows[0];
     } catch (error) {
       throw error;

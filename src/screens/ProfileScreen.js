@@ -14,6 +14,7 @@ import {
   Switch,
   Modal,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -58,6 +59,11 @@ export default function ProfileScreen({ route, navigation }) {
     email_verified: false,
   });
   const [editData, setEditData] = useState({});
+  const [profileData, setProfileData] = useState(null); // Gelişmiş profil bilgileri
+  const [socialMedia, setSocialMedia] = useState({
+    instagram: '',
+    tiktok: ''
+  });
   const [userStats, setUserStats] = useState({
     friends: 0,
     messages: 0,
@@ -97,6 +103,11 @@ export default function ProfileScreen({ route, navigation }) {
     photo: null
   });
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  
+  // Arkadaş detay modalı için state'ler
+  const [showFriendDetailModal, setShowFriendDetailModal] = useState(false);
+  const [selectedFriendDetail, setSelectedFriendDetail] = useState(null);
+  const [isLoadingFriendDetail, setIsLoadingFriendDetail] = useState(false);
 
 
   const menuItems = [
@@ -228,6 +239,21 @@ export default function ProfileScreen({ route, navigation }) {
       if (response.success) {
         setUserInfo(response.data.user);
         setEditData(response.data.user);
+        
+        // Gelişmiş profil bilgilerini yükle
+        if (response.data.profile) {
+          setProfileData(response.data.profile);
+          // Sosyal medya linklerini state'e aktar
+          if (response.data.profile.social_media) {
+            const socialMediaData = typeof response.data.profile.social_media === 'string' 
+              ? JSON.parse(response.data.profile.social_media) 
+              : response.data.profile.social_media;
+            setSocialMedia({
+              instagram: socialMediaData.instagram || '',
+              tiktok: socialMediaData.tiktok || ''
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('Profile load error:', error);
@@ -367,10 +393,36 @@ export default function ProfileScreen({ route, navigation }) {
   const handleSave = async () => {
     try {
       setIsLoading(true);
+      
+      // Token'ı kontrol et
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      // Temel profil bilgilerini güncelle
       const response = await apiService.updateProfile(editData);
       
       if (response.success) {
         setUserInfo(response.data.user);
+        
+        // Sosyal medya linklerini de güncelle
+        try {
+          const socialMediaResponse = await apiService.updateAdvancedProfile({
+            socialMedia: socialMedia
+          });
+          
+          if (socialMediaResponse.success) {
+            setProfileData(socialMediaResponse.data);
+          }
+        } catch (socialError) {
+          console.error('Social media update error:', socialError);
+          // Sosyal medya güncelleme hatası kritik değil, devam et
+        }
+        
         setIsEditing(false);
         Alert.alert('Başarılı', 'Profil başarıyla güncellendi');
       }
@@ -385,6 +437,21 @@ export default function ProfileScreen({ route, navigation }) {
   const handleCancel = () => {
     setIsEditing(false);
     setEditData({ ...userInfo });
+    // Sosyal medya değişikliklerini geri al
+    if (profileData && profileData.social_media) {
+      const socialMediaData = typeof profileData.social_media === 'string' 
+        ? JSON.parse(profileData.social_media) 
+        : profileData.social_media;
+      setSocialMedia({
+        instagram: socialMediaData.instagram || '',
+        tiktok: socialMediaData.tiktok || ''
+      });
+    } else {
+      setSocialMedia({
+        instagram: '',
+        tiktok: ''
+      });
+    }
   };
 
   const handleImagePicker = () => {
@@ -827,6 +894,45 @@ export default function ProfileScreen({ route, navigation }) {
     }
   };
 
+  // Arkadaş detaylarını yükle
+  const loadFriendDetail = async (friend) => {
+    try {
+      setIsLoadingFriendDetail(true);
+      setSelectedFriendDetail(null);
+      
+      // Token'ı kontrol et
+      const token = await apiService.getStoredToken();
+      if (!token) {
+        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      apiService.setToken(token);
+      
+      // Arkadaş profil bilgilerini ve araçlarını paralel olarak yükle
+      const [profileResponse, vehiclesResponse] = await Promise.all([
+        apiService.getUserProfile(friend.id),
+        apiService.getFriendVehicles(friend.id)
+      ]);
+      
+      if (profileResponse.success) {
+        const friendData = {
+          ...profileResponse.data,
+          vehicles: vehiclesResponse.success ? vehiclesResponse.data.vehicles : []
+        };
+        setSelectedFriendDetail(friendData);
+        setShowFriendDetailModal(true);
+      } else {
+        Alert.alert('Hata', profileResponse.message || 'Arkadaş bilgileri yüklenemedi');
+      }
+    } catch (error) {
+      console.error('Friend detail load error:', error);
+      Alert.alert('Hata', 'Arkadaş bilgileri yüklenirken bir hata oluştu');
+    } finally {
+      setIsLoadingFriendDetail(false);
+    }
+  };
+
   // Araç kaydetme fonksiyonu
   const saveVehicle = async () => {
     try {
@@ -1198,6 +1304,8 @@ export default function ProfileScreen({ route, navigation }) {
               <View style={styles.sectionIconContainer}>
                 <Ionicons name="person-circle" size={24} color={colors.primary} />
               </View>
+            </View>
+            <View style={styles.sectionTitleContainer}>
               <Text style={styles.sectionTitle}>Profil Bilgileri</Text>
             </View>
             
@@ -1373,6 +1481,100 @@ export default function ProfileScreen({ route, navigation }) {
                   </View>
                 )}
               </View>
+            </View>
+
+            {/* Sosyal Medya Linkleri */}
+            <View style={styles.infoCard}>
+              <View style={styles.cardHeader}>
+                <Ionicons name="share-social-outline" size={20} color={colors.primary} />
+                <Text style={styles.cardTitle}>Sosyal Medya</Text>
+              </View>
+              
+              {isEditing ? (
+                <>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.labelContainer}>
+                      <Ionicons name="logo-instagram" size={16} color={colors.text.secondary} />
+                      <Text style={styles.label}>Instagram</Text>
+                    </View>
+                    <TextInput
+                      style={styles.modernInput}
+                      value={socialMedia.instagram}
+                      onChangeText={(text) => setSocialMedia({...socialMedia, instagram: text})}
+                      placeholder="@kullanıcıadı veya URL"
+                      placeholderTextColor={colors.text.tertiary}
+                      autoCapitalize="none"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <View style={styles.labelContainer}>
+                      <Ionicons name="logo-tiktok" size={16} color={colors.text.secondary} />
+                      <Text style={styles.label}>TikTok</Text>
+                    </View>
+                    <TextInput
+                      style={styles.modernInput}
+                      value={socialMedia.tiktok}
+                      onChangeText={(text) => setSocialMedia({...socialMedia, tiktok: text})}
+                      placeholder="@kullanıcıadı"
+                      placeholderTextColor={colors.text.tertiary}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.socialMediaContainer}>
+                  {Object.keys(socialMedia).filter(key => socialMedia[key]).length > 0 ? (
+                    <View style={styles.socialMediaLinks}>
+                      {socialMedia.instagram && (
+                        <TouchableOpacity 
+                          style={styles.socialMediaLink}
+                          onPress={() => {
+                            const url = socialMedia.instagram.startsWith('http') 
+                              ? socialMedia.instagram 
+                              : socialMedia.instagram.startsWith('@')
+                              ? `https://instagram.com/${socialMedia.instagram.substring(1)}`
+                              : `https://instagram.com/${socialMedia.instagram}`;
+                            Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                          }}
+                        >
+                          <Ionicons name="logo-instagram" size={24} color="#E4405F" />
+                          <Text style={styles.socialMediaText} numberOfLines={1}>
+                            {socialMedia.instagram}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      
+                      {socialMedia.tiktok && (
+                        <TouchableOpacity 
+                          style={styles.socialMediaLink}
+                          onPress={() => {
+                            const url = socialMedia.tiktok.startsWith('http') 
+                              ? socialMedia.tiktok 
+                              : socialMedia.tiktok.startsWith('@')
+                              ? `https://tiktok.com/@${socialMedia.tiktok.substring(1)}`
+                              : `https://tiktok.com/@${socialMedia.tiktok}`;
+                            Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                          }}
+                        >
+                          <Ionicons name="logo-tiktok" size={24} color="#000000" />
+                          <Text style={styles.socialMediaText} numberOfLines={1}>
+                            {socialMedia.tiktok}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.noSocialMediaContainer}>
+                      <Ionicons name="share-social-outline" size={32} color={colors.text.tertiary} />
+                      <Text style={styles.noSocialMediaText}>Henüz sosyal medya linki eklenmemiş</Text>
+                      <Text style={styles.noSocialMediaSubtext}>
+                        Düzenle butonuna tıklayarak sosyal medya hesaplarınızı ekleyin
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
 
             {isEditing && (
@@ -1554,16 +1756,22 @@ export default function ProfileScreen({ route, navigation }) {
                 <ScrollView style={styles.friendsList}>
                   {friends.map((friend) => (
                     <View key={friend.id} style={styles.friendItem}>
-                      <Image
-                        source={{ 
-                          uri: friend.profile_picture || 'https://via.placeholder.com/50x50/cccccc/666666?text=Profil' 
-                        }}
-                        style={styles.friendAvatar}
-                      />
-                      <View style={styles.friendInfo}>
-                        <Text style={styles.friendName}>{friend.name}</Text>
-                        <Text style={styles.friendEmail}>{friend.email}</Text>
-                      </View>
+                      <TouchableOpacity
+                        style={styles.friendItemContent}
+                        onPress={() => loadFriendDetail(friend)}
+                        activeOpacity={0.7}
+                      >
+                        <Image
+                          source={{ 
+                            uri: friend.profile_picture || 'https://via.placeholder.com/50x50/cccccc/666666?text=Profil' 
+                          }}
+                          style={styles.friendAvatar}
+                        />
+                        <View style={styles.friendInfo}>
+                          <Text style={styles.friendName}>{friend.name}</Text>
+                          <Text style={styles.friendEmail}>{friend.email}</Text>
+                        </View>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.removeFriendButton}
                         onPress={() => removeFriend(friend.id, friend.name)}
@@ -1580,6 +1788,107 @@ export default function ProfileScreen({ route, navigation }) {
                   <Text style={styles.noFriendsSubtext}>Yeni arkadaşlar ekleyerek sosyal ağınızı genişletin</Text>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Arkadaş Detay Modal */}
+        <Modal
+          visible={showFriendDetailModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowFriendDetailModal(false);
+            setSelectedFriendDetail(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.friendDetailModalContent}>
+              <View style={styles.friendDetailModalHeader}>
+                <Text style={styles.friendDetailModalTitle}>Arkadaş Detayları</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    setShowFriendDetailModal(false);
+                    setSelectedFriendDetail(null);
+                  }}
+                >
+                  <Ionicons name="close" size={24} color={colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              
+              {isLoadingFriendDetail ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Yükleniyor...</Text>
+                </View>
+              ) : selectedFriendDetail ? (
+                <ScrollView style={styles.friendDetailContent}>
+                  {/* Kullanıcı İsmi */}
+                  <View style={styles.friendDetailSection}>
+                    <View style={styles.friendDetailInfoRow}>
+                      <Ionicons name="person" size={20} color={colors.primary} />
+                      <Text style={styles.friendDetailLabel}>İsim:</Text>
+                      <Text style={styles.friendDetailValue}>
+                        {selectedFriendDetail.first_name} {selectedFriendDetail.last_name}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Yaş */}
+                  {selectedFriendDetail.birth_date && (
+                    <View style={styles.friendDetailSection}>
+                      <View style={styles.friendDetailInfoRow}>
+                        <Ionicons name="calendar" size={20} color={colors.primary} />
+                        <Text style={styles.friendDetailLabel}>Yaş:</Text>
+                        <Text style={styles.friendDetailValue}>
+                          {calculateAge(selectedFriendDetail.birth_date)} yaşında
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Durum */}
+                  <View style={styles.friendDetailSection}>
+                    <View style={styles.friendDetailInfoRow}>
+                      <Ionicons name="information-circle" size={20} color={colors.primary} />
+                      <Text style={styles.friendDetailLabel}>Durum:</Text>
+                      <Text style={styles.friendDetailValue}>
+                        {selectedFriendDetail.is_active ? 'Aktif' : 'Pasif'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Araç Fotoğrafı */}
+                  {selectedFriendDetail.vehicles && selectedFriendDetail.vehicles.length > 0 && (
+                    <View style={styles.friendDetailSection}>
+                      <Text style={styles.friendDetailSectionTitle}>Araç Fotoğrafları</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.vehiclePhotosContainer}>
+                        {selectedFriendDetail.vehicles.map((vehicle) => (
+                          vehicle.photo_url ? (
+                            <View key={vehicle.id} style={styles.vehiclePhotoItem}>
+                              <Image
+                                source={{ uri: apiService.getFullImageUrl(vehicle.photo_url) }}
+                                style={styles.vehiclePhotoImage}
+                                resizeMode="cover"
+                              />
+                            </View>
+                          ) : null
+                        ))}
+                      </ScrollView>
+                      {selectedFriendDetail.vehicles.filter(v => v.photo_url).length === 0 && (
+                        <Text style={styles.noVehiclePhotoText}>Araç fotoğrafı bulunmuyor</Text>
+                      )}
+                    </View>
+                  )}
+
+                  {(!selectedFriendDetail.vehicles || selectedFriendDetail.vehicles.length === 0) && (
+                    <View style={styles.friendDetailSection}>
+                      <Text style={styles.noVehicleText}>Araç bilgisi bulunmuyor</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              ) : null}
             </View>
           </View>
         </Modal>
@@ -1915,8 +2224,9 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: verticalScale(20),
+    marginBottom: verticalScale(10),
     paddingHorizontal: getResponsivePadding(5),
   },
   sectionIconContainer: {
@@ -1926,7 +2236,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: scale(12),
+  },
+  sectionTitleContainer: {
+    alignItems: 'center',
+    marginBottom: verticalScale(15),
   },
   infoCard: {
     backgroundColor: colors.surface,
@@ -2932,5 +3245,157 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+  },
+  // Arkadaş detay modal stilleri
+  friendItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  friendDetailModalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: scale(20),
+    padding: getResponsivePadding(20),
+    width: screenWidth * 0.95,
+    maxHeight: screenHeight * 0.85,
+    shadowColor: colors.shadow.dark,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  friendDetailModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: verticalScale(20),
+    paddingBottom: verticalScale(15),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light + '30',
+  },
+  friendDetailModalTitle: {
+    fontSize: scaleFont(20),
+    fontWeight: 'bold',
+    color: colors.text.primary,
+  },
+  friendDetailContent: {
+    maxHeight: screenHeight * 0.65,
+  },
+  friendDetailSection: {
+    marginBottom: verticalScale(20),
+    paddingBottom: verticalScale(15),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light + '20',
+  },
+  friendDetailInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: verticalScale(8),
+  },
+  friendDetailLabel: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginLeft: scale(10),
+    marginRight: scale(8),
+    minWidth: scale(60),
+  },
+  friendDetailValue: {
+    fontSize: scaleFont(16),
+    fontWeight: '500',
+    color: colors.text.primary,
+    flex: 1,
+  },
+  friendDetailSectionTitle: {
+    fontSize: scaleFont(18),
+    fontWeight: 'bold',
+    color: colors.text.primary,
+    marginBottom: verticalScale(15),
+  },
+  vehiclePhotosContainer: {
+    marginTop: verticalScale(10),
+  },
+  vehiclePhotoItem: {
+    marginRight: scale(15),
+    alignItems: 'center',
+    width: scale(200),
+  },
+  vehiclePhotoImage: {
+    width: scale(200),
+    height: verticalScale(150),
+    borderRadius: scale(12),
+    backgroundColor: colors.background,
+  },
+  vehiclePhotoLabel: {
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginTop: verticalScale(8),
+    textAlign: 'center',
+  },
+  vehiclePhotoPlate: {
+    fontSize: scaleFont(12),
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: verticalScale(4),
+    letterSpacing: 1,
+  },
+  noVehiclePhotoText: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: verticalScale(10),
+  },
+  noVehicleText: {
+    fontSize: scaleFont(14),
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  socialMediaContainer: {
+    marginTop: verticalScale(10),
+  },
+  socialMediaLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: scale(10),
+  },
+  socialMediaLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(16),
+    borderRadius: scale(12),
+    marginBottom: verticalScale(8),
+    borderWidth: 1,
+    borderColor: colors.border.light + '30',
+    flex: 1,
+    minWidth: '48%',
+  },
+  socialMediaText: {
+    fontSize: scaleFont(14),
+    color: colors.text.primary,
+    marginLeft: scale(8),
+    flex: 1,
+  },
+  noSocialMediaContainer: {
+    alignItems: 'center',
+    paddingVertical: verticalScale(30),
+    paddingHorizontal: scale(20),
+  },
+  noSocialMediaText: {
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginTop: verticalScale(12),
+    textAlign: 'center',
+  },
+  noSocialMediaSubtext: {
+    fontSize: scaleFont(14),
+    color: colors.text.tertiary,
+    marginTop: verticalScale(8),
+    textAlign: 'center',
   },
 });

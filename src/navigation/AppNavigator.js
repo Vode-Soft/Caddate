@@ -26,6 +26,7 @@ import SecurityScreen from '../screens/SecurityScreen';
 import ConfessionScreen from '../screens/ConfessionScreen';
 import NotificationCenterScreen from '../screens/NotificationCenterScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
+import PaymentScreen from '../screens/PaymentScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import AboutScreen from '../screens/AboutScreen';
 import MatchesScreen from '../screens/MatchesScreen';
@@ -301,6 +302,9 @@ export default function AppNavigator() {
           </Stack.Screen>
           <Stack.Screen name="Subscription">
             {(props) => <SubscriptionScreen {...props} />}
+          </Stack.Screen>
+          <Stack.Screen name="Payment">
+            {(props) => <PaymentScreen {...props} />}
           </Stack.Screen>
           <Stack.Screen name="HelpSupport">
             {(props) => <HelpSupportScreen {...props} />}

@@ -63,9 +63,36 @@ const getProfile = async (req, res) => {
       user.profile_picture = `${protocol}://${host}${user.profile_picture}`;
     }
 
+    // user_profiles tablosundan gelişmiş profil bilgilerini al
+    let userProfile = null;
+    try {
+      const profileQuery = 'SELECT * FROM user_profiles WHERE user_id = $1';
+      const profileResult = await pool.query(profileQuery, [userId]);
+      
+      if (profileResult.rows.length > 0) {
+        userProfile = profileResult.rows[0];
+        // JSONB alanlarını parse et
+        if (userProfile.social_media && typeof userProfile.social_media === 'string') {
+          userProfile.social_media = JSON.parse(userProfile.social_media);
+        }
+        if (userProfile.lifestyle_preferences && typeof userProfile.lifestyle_preferences === 'string') {
+          userProfile.lifestyle_preferences = JSON.parse(userProfile.lifestyle_preferences);
+        }
+        if (userProfile.additional_info && typeof userProfile.additional_info === 'string') {
+          userProfile.additional_info = JSON.parse(userProfile.additional_info);
+        }
+      }
+    } catch (profileError) {
+      console.error('User profile fetch error:', profileError);
+      // Profil bilgisi yoksa devam et, hata verme
+    }
+
     res.json({
       success: true,
-      data: { user }
+      data: { 
+        user,
+        profile: userProfile
+      }
     });
 
   } catch (error) {
@@ -111,11 +138,38 @@ const getUserProfile = async (req, res) => {
       user.profile_picture = `${protocol}://${host}${user.profile_picture}`;
     }
     
+    // user_profiles tablosundan gelişmiş profil bilgilerini al
+    let userProfile = null;
+    try {
+      const profileQuery = 'SELECT * FROM user_profiles WHERE user_id = $1';
+      const profileResult = await pool.query(profileQuery, [userId]);
+      
+      if (profileResult.rows.length > 0) {
+        userProfile = profileResult.rows[0];
+        // JSONB alanlarını parse et
+        if (userProfile.social_media && typeof userProfile.social_media === 'string') {
+          userProfile.social_media = JSON.parse(userProfile.social_media);
+        }
+        if (userProfile.lifestyle_preferences && typeof userProfile.lifestyle_preferences === 'string') {
+          userProfile.lifestyle_preferences = JSON.parse(userProfile.lifestyle_preferences);
+        }
+        if (userProfile.additional_info && typeof userProfile.additional_info === 'string') {
+          userProfile.additional_info = JSON.parse(userProfile.additional_info);
+        }
+      }
+    } catch (profileError) {
+      console.error('User profile fetch error:', profileError);
+      // Profil bilgisi yoksa devam et, hata verme
+    }
+    
     console.log(`getUserProfile: User found - ${user.first_name} ${user.last_name}`);
     
     res.json({
       success: true,
-      data: user
+      data: {
+        ...user,
+        profile: userProfile
+      }
     });
     
   } catch (error) {
@@ -285,10 +339,19 @@ const getSettings = async (req, res) => {
     };
 
     // Kullanıcının ayarlarını al (varsayılan değerlerle birleştir)
-    const userSettings = user.settings || {};
+    const userSettings = user.settings ? (typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings) : {};
+    
+    // Privacy ayarlarını ayrı kolondan al
+    const userPrivacy = user.privacy ? (typeof user.privacy === 'string' ? JSON.parse(user.privacy) : user.privacy) : {};
+    
+    // Ayarları birleştir - privacy ayarlarını ayrı kolondan al ve settings içine ekle
     const settings = {
       ...defaultSettings,
-      ...userSettings
+      ...userSettings,
+      privacy: {
+        ...defaultSettings.privacy,
+        ...userPrivacy
+      }
     };
 
     res.json({
@@ -331,10 +394,19 @@ const updateSettings = async (req, res) => {
 
     const updatedUser = await User.updateSettings(userId, filteredData);
 
+    // Güncellenmiş ayarları birleştir
+    const userSettings = updatedUser.settings ? (typeof updatedUser.settings === 'string' ? JSON.parse(updatedUser.settings) : updatedUser.settings) : {};
+    const userPrivacy = updatedUser.privacy ? (typeof updatedUser.privacy === 'string' ? JSON.parse(updatedUser.privacy) : updatedUser.privacy) : {};
+    
+    const mergedSettings = {
+      ...userSettings,
+      privacy: userPrivacy
+    };
+
     res.json({
       success: true,
       message: 'Ayarlar başarıyla güncellendi',
-      data: { settings: updatedUser.settings }
+      data: { settings: mergedSettings }
     });
 
   } catch (error) {

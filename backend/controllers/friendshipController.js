@@ -623,10 +623,19 @@ const getFriendVehicles = async (req, res) => {
     
     const vehiclesResult = await pool.query(vehiclesQuery, [friendId]);
     
+    // Fotoğraf URL'lerini tam URL olarak oluştur
+    const protocol = req.protocol;
+    const host = req.get('host');
+    
+    const vehiclesWithFullUrls = vehiclesResult.rows.map(vehicle => ({
+      ...vehicle,
+      photo_url: vehicle.photo_url ? `${protocol}://${host}${vehicle.photo_url}` : null
+    }));
+    
     res.json({
       success: true,
       data: {
-        vehicles: vehiclesResult.rows
+        vehicles: vehiclesWithFullUrls
       }
     });
     

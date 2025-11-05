@@ -3,13 +3,12 @@ const Subscription = require('../models/Subscription');
 // Abonelik planlarını listele
 exports.getPlans = async (req, res) => {
   try {
-    console.log('getPlans controller called');
     const plans = await Subscription.getPlans();
-    console.log('Plans retrieved in controller:', plans.length);
-    console.log('Plans data:', JSON.stringify(plans, null, 2));
     
     if (!plans || plans.length === 0) {
-      console.warn('⚠️  No plans found in database');
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️  No plans found in database');
+      }
       return res.json({
         success: true,
         plans: [],
@@ -23,13 +22,6 @@ exports.getPlans = async (req, res) => {
     });
   } catch (error) {
     console.error('Get plans error:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint
-    });
     
     // Veritabanı hatası ise özel mesaj
     if (error.code === '42P01') { // Table does not exist
@@ -54,7 +46,14 @@ exports.getPlans = async (req, res) => {
 // Kullanıcının aktif aboneliğini getir
 exports.getUserSubscription = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
     
     const subscription = await Subscription.getUserActiveSubscription(userId);
     const premiumStatus = await Subscription.checkUserPremiumStatus(userId);
@@ -68,7 +67,8 @@ exports.getUserSubscription = async (req, res) => {
     console.error('Get user subscription error:', error);
     res.status(500).json({
       success: false,
-      message: 'Abonelik bilgileri yüklenirken hata oluştu'
+      message: 'Abonelik bilgileri yüklenirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -76,20 +76,29 @@ exports.getUserSubscription = async (req, res) => {
 // Kullanıcının abonelik geçmişini getir
 exports.getSubscriptionHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const limit = parseInt(req.query.limit) || 10;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
+    
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100); // Max 100
     
     const subscriptions = await Subscription.getUserSubscriptions(userId, limit);
     
     res.json({
       success: true,
-      subscriptions
+      subscriptions: subscriptions || []
     });
   } catch (error) {
     console.error('Get subscription history error:', error);
     res.status(500).json({
       success: false,
-      message: 'Abonelik geçmişi yüklenirken hata oluştu'
+      message: 'Abonelik geçmişi yüklenirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -97,13 +106,31 @@ exports.getSubscriptionHistory = async (req, res) => {
 // Yeni abonelik oluştur
 exports.createSubscription = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { planId, paymentMethod, transactionId, amountPaid } = req.body;
+    const userId = req.user?.id;
     
-    if (!planId || !paymentMethod || !transactionId || !amountPaid) {
+    if (!userId) {
       return res.status(400).json({
         success: false,
-        message: 'Gerekli alanlar eksik'
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
+    
+    const { planId, paymentMethod, transactionId, amountPaid } = req.body;
+    
+    // Validation
+    if (!planId || !paymentMethod || !transactionId || amountPaid === undefined || amountPaid === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gerekli alanlar eksik: planId, paymentMethod, transactionId ve amountPaid gerekli'
+      });
+    }
+    
+    // Amount validation
+    const amount = parseFloat(amountPaid);
+    if (isNaN(amount) || amount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Geçersiz ödeme tutarı'
       });
     }
     
@@ -112,7 +139,7 @@ exports.createSubscription = async (req, res) => {
       planId,
       paymentMethod,
       transactionId,
-      amountPaid
+      amount
     );
     
     res.json({
@@ -124,7 +151,8 @@ exports.createSubscription = async (req, res) => {
     console.error('Create subscription error:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Abonelik oluşturulurken hata oluştu'
+      message: error.message || 'Abonelik oluşturulurken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -132,8 +160,24 @@ exports.createSubscription = async (req, res) => {
 // Aboneliği iptal et
 exports.cancelSubscription = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
+    
     const { subscriptionId } = req.params;
+    
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Abonelik ID gerekli'
+      });
+    }
+    
     const { reason } = req.body;
     
     const subscription = await Subscription.cancelSubscription(userId, subscriptionId, reason);
@@ -141,7 +185,7 @@ exports.cancelSubscription = async (req, res) => {
     if (!subscription) {
       return res.status(404).json({
         success: false,
-        message: 'Abonelik bulunamadı'
+        message: 'Abonelik bulunamadı veya iptal edilemez'
       });
     }
     
@@ -154,7 +198,8 @@ exports.cancelSubscription = async (req, res) => {
     console.error('Cancel subscription error:', error);
     res.status(500).json({
       success: false,
-      message: 'Abonelik iptal edilirken hata oluştu'
+      message: error.message || 'Abonelik iptal edilirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -162,20 +207,29 @@ exports.cancelSubscription = async (req, res) => {
 // Ödeme geçmişini getir
 exports.getPaymentHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const limit = parseInt(req.query.limit) || 20;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kullanıcı ID bulunamadı'
+      });
+    }
+    
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Max 100
     
     const payments = await Subscription.getPaymentHistory(userId, limit);
     
     res.json({
       success: true,
-      payments
+      payments: payments || []
     });
   } catch (error) {
     console.error('Get payment history error:', error);
     res.status(500).json({
       success: false,
-      message: 'Ödeme geçmişi yüklenirken hata oluştu'
+      message: 'Ödeme geçmişi yüklenirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -183,7 +237,7 @@ exports.getPaymentHistory = async (req, res) => {
 // Premium durumu kontrol et
 exports.checkPremiumStatus = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
     
     if (!userId) {
       return res.status(400).json({
@@ -200,13 +254,6 @@ exports.checkPremiumStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Check premium status error:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint
-    });
     
     res.status(500).json({
       success: false,
@@ -220,24 +267,26 @@ exports.checkPremiumStatus = async (req, res) => {
 exports.getAllSubscriptions = async (req, res) => {
   try {
     const status = req.query.status;
-    const limit = parseInt(req.query.limit) || 100;
-    const offset = parseInt(req.query.offset) || 0;
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     
     const subscriptions = await Subscription.getAllSubscriptions(status, limit, offset);
     
     res.json({
       success: true,
-      subscriptions,
+      subscriptions: subscriptions || [],
       pagination: {
         limit,
-        offset
+        offset,
+        total: subscriptions?.length || 0
       }
     });
   } catch (error) {
     console.error('Get all subscriptions error:', error);
     res.status(500).json({
       success: false,
-      message: 'Abonelikler yüklenirken hata oluştu'
+      message: 'Abonelikler yüklenirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -249,13 +298,14 @@ exports.getSubscriptionStats = async (req, res) => {
     
     res.json({
       success: true,
-      stats
+      stats: stats || {}
     });
   } catch (error) {
     console.error('Get subscription stats error:', error);
     res.status(500).json({
       success: false,
-      message: 'İstatistikler yüklenirken hata oluştu'
+      message: 'İstatistikler yüklenirken hata oluştu',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

@@ -191,96 +191,94 @@ export default function SubscriptionScreen({ navigation }) {
   };
 
   const handleUpgrade = async (planId) => {
-    // Plan ID'yi integer'a çevir (backend'den integer gelebilir)
-    const planIdInt = parseInt(planId);
-    
-    // Mevcut plan kontrolü
-    const currentPlanId = userSubscription?.plan_id || currentPlan;
-    if (planIdInt === currentPlanId || planId === currentPlanId) {
-      Alert.alert('Bilgi', 'Bu plan zaten aktif.');
-      return;
-    }
-
-    const selectedPlan = plans.find(p => p.id === planId || p.id === planIdInt);
-    if (!selectedPlan) {
-      Alert.alert('Hata', 'Plan bulunamadı.');
-      return;
-    }
-
-    // Satın alma onayı
-    Alert.alert(
-      'Abonelik Satın Al',
-      `${selectedPlan.name} planını ${selectedPlan.price}/${selectedPlan.period} fiyatına satın almak istiyor musunuz?`,
-      [
-        {
-          text: 'İptal',
-          style: 'cancel'
-        },
-        {
-          text: 'Satın Al',
-          style: 'default',
-          onPress: async () => {
-            await processPurchase(planIdInt || planId);
-          }
-        }
-      ]
-    );
-  };
-
-  const processPurchase = async (planId) => {
     try {
-      setIsLoading(true);
+      // Plan ID'yi integer'a çevir (backend'den integer gelebilir)
+      const planIdInt = parseInt(planId);
       
-      const token = await apiService.getStoredToken();
-      if (!token) {
-        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+      // Mevcut plan kontrolü
+      const currentPlanId = userSubscription?.plan_id || currentPlan;
+      if (planIdInt === currentPlanId || planId === currentPlanId) {
+        Alert.alert('Bilgi', 'Bu plan zaten aktif.');
         return;
       }
 
-      apiService.setToken(token);
-
-      // Plan bilgilerini al
-      const selectedPlan = plans.find(p => p.id === planId);
+      const selectedPlan = plans.find(p => p.id === planId || p.id === planIdInt);
       if (!selectedPlan) {
-        throw new Error('Plan bulunamadı');
+        Alert.alert('Hata', 'Plan bulunamadı.');
+        return;
       }
 
-      // Abonelik oluştur
-      const response = await apiService.createSubscription(
-        planId,
-        'test', // Test ödeme metodu (gerçek ödeme gateway'i entegre edildiğinde değiştirilecek)
-        null, // transactionId otomatik oluşturulacak
-        null  // amountPaid plan fiyatından alınacak
-      );
+      // Ödeme sayfasına yönlendir
+      navigation.navigate('Payment', {
+        plan: selectedPlan,
+        onPaymentSuccess: async () => {
+          // Ödeme başarılı olduğunda abonelik durumunu güncelle
+          await loadUserSubscription();
+          await loadPlans();
+          setCurrentPlan(planIdInt || planId);
+        }
+      });
+    } catch (error) {
+      console.error('Handle upgrade error:', error);
+      Alert.alert('Hata', 'Plan seçilirken bir hata oluştu. Lütfen tekrar deneyin.');
+    }
+  };
 
-      if (response.success) {
-        // Abonelik bilgilerini yenile
-        await loadUserSubscription();
-        setCurrentPlan(planId);
+  const handleCancelSubscription = async () => {
+    try {
+      if (!userSubscription || !userSubscription.id) {
+        Alert.alert('Bilgi', 'Aktif aboneliğiniz bulunmamaktadır.');
+        return;
+      }
 
-        Alert.alert(
-          'Başarılı! 🎉', 
-          `${selectedPlan.name} planına başarıyla yükseltildiniz!\n\nPremium özellikler aktif.`,
-          [
-            {
-              text: 'Tamam',
-              onPress: () => {
-                navigation.goBack();
+      Alert.alert(
+        'Aboneliği İptal Et',
+        'Aboneliğinizi iptal etmek istediğinizden emin misiniz?',
+        [
+          {
+            text: 'Hayır',
+            style: 'cancel'
+          },
+          {
+            text: 'Evet, İptal Et',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setIsLoading(true);
+                const token = await apiService.getStoredToken();
+                if (!token) {
+                  Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+                  return;
+                }
+
+                apiService.setToken(token);
+                
+                // Aboneliği iptal et
+                const response = await apiService.cancelSubscription(
+                  userSubscription.id,
+                  'Kullanıcı tarafından iptal edildi'
+                );
+                
+                if (response.success) {
+                  await loadUserSubscription();
+                  await loadPlans();
+                  Alert.alert('Başarılı', 'Aboneliğiniz başarıyla iptal edildi.');
+                } else {
+                  throw new Error(response.message || 'Abonelik iptal edilemedi');
+                }
+              } catch (error) {
+                console.error('Cancel subscription error:', error);
+                Alert.alert('Hata', 'Abonelik iptal edilirken bir hata oluştu.');
+              } finally {
+                setIsLoading(false);
               }
             }
-          ]
-        );
-      } else {
-        throw new Error(response.message || 'Abonelik oluşturulamadı');
-      }
-    } catch (error) {
-      console.error('Purchase error:', error);
-      Alert.alert(
-        'Hata', 
-        error.message || 'Satın alma işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin.'
+          }
+        ]
       );
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      console.error('Handle cancel error:', error);
+      Alert.alert('Hata', 'İptal işlemi sırasında bir hata oluştu.');
     }
   };
 
@@ -333,7 +331,9 @@ export default function SubscriptionScreen({ navigation }) {
       <TouchableOpacity
         style={[
           styles.upgradeButton,
-          currentPlan === plan.id && styles.currentPlanButton
+          (currentPlan === plan.id || 
+           parseInt(currentPlan) === plan.id ||
+           (userSubscription && (userSubscription.plan_id === plan.id || parseInt(userSubscription.plan_id) === plan.id))) && styles.currentPlanButton
         ]}
         onPress={() => handleUpgrade(plan.id)}
         disabled={isLoading || 
@@ -352,7 +352,7 @@ export default function SubscriptionScreen({ navigation }) {
               <LinearGradient
                 colors={plan.popular 
                   ? [colors.secondary, colors.primary] 
-                  : [plan.color, plan.color + 'DD']
+                  : [plan.color, plan.color]
                 }
                 style={StyleSheet.absoluteFill}
                 start={{ x: 0, y: 0 }}
@@ -369,7 +369,7 @@ export default function SubscriptionScreen({ navigation }) {
             ? 'Mevcut Plan' 
             : isLoading 
               ? 'İşleniyor...' 
-              : 'Satın Al'}
+              : 'Planı Seç'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -426,7 +426,21 @@ export default function SubscriptionScreen({ navigation }) {
                 <Text style={styles.currentPlanStatus}>
                   {userSubscription ? 'Aktif' : 'Ücretsiz'}
                 </Text>
+                {userSubscription && userSubscription.end_date && (
+                  <Text style={styles.currentPlanExpiry}>
+                    Bitiş: {new Date(userSubscription.end_date).toLocaleDateString('tr-TR')}
+                  </Text>
+                )}
               </View>
+              {userSubscription && userSubscription.status === 'active' && (
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={handleCancelSubscription}
+                  disabled={isLoading}
+                >
+                  <Ionicons name="close-circle" size={scale(24)} color={colors.error} />
+                </TouchableOpacity>
+              )}
             </LinearGradient>
           </View>
 
@@ -543,6 +557,15 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     color: colors.success,
     fontWeight: '600',
+  },
+  currentPlanExpiry: {
+    fontSize: scaleFont(11),
+    color: colors.text.secondary,
+    marginTop: verticalScale(4),
+  },
+  cancelButton: {
+    padding: scale(8),
+    marginLeft: scale(12),
   },
   sectionHeader: {
     marginBottom: verticalScale(24),
@@ -674,6 +697,9 @@ const styles = StyleSheet.create({
   },
   currentPlanButton: {
     backgroundColor: colors.darkGray,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   upgradeButtonText: {
     color: 'white',

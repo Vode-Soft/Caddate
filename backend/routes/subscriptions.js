@@ -5,10 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/adminAuth');
 
 // Kullanıcı route'ları - kimlik doğrulama gerekli
-router.get('/plans', (req, res) => {
-  console.log('Plans route called');
-  subscriptionController.getPlans(req, res);
-});
+router.get('/plans', subscriptionController.getPlans);
 router.get('/my-subscription', authenticateToken, subscriptionController.getUserSubscription);
 router.get('/history', authenticateToken, subscriptionController.getSubscriptionHistory);
 router.post('/create', authenticateToken, subscriptionController.createSubscription);

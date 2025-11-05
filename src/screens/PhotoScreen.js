@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { 
   scale, 
   verticalScale, 
@@ -55,6 +61,18 @@ export default function PhotoScreen() {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [showComments, setShowComments] = useState(false);
+  
+  // Zoom state
+  const scaleValue = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const lastScale = useSharedValue(1);
+  const lastTranslateX = useSharedValue(0);
+  const lastTranslateY = useSharedValue(0);
+  const pinchRef = useRef(null);
+  const panRef = useRef(null);
+  const doubleTapTimer = useRef(null);
+  const lastTap = useRef(null);
 
   // Component mount olduğunda fotoğrafları yükle
   useEffect(() => {
@@ -412,7 +430,113 @@ export default function PhotoScreen() {
     setShowComments(false);
     setComments([]);
     setNewComment('');
+    // Reset zoom
+    scaleValue.value = 1;
+    translateX.value = 0;
+    translateY.value = 0;
+    lastScale.value = 1;
+    lastTranslateX.value = 0;
+    lastTranslateY.value = 0;
+    // Clear double tap timer
+    if (doubleTapTimer.current) {
+      clearTimeout(doubleTapTimer.current);
+      doubleTapTimer.current = null;
+    }
+    lastTap.current = null;
   };
+  
+  // Handle pinch gesture
+  const onPinchEvent = (event) => {
+    const newScale = Math.max(1, Math.min(lastScale.value * event.nativeEvent.scale, 4));
+    scaleValue.value = newScale;
+  };
+  
+  const onPinchStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
+      lastScale.value = scaleValue.value;
+    }
+  };
+  
+  // Handle pan gesture
+  const onPanEvent = (event) => {
+    if (scaleValue.value > 1) {
+      const newTranslateX = lastTranslateX.value + event.nativeEvent.translationX;
+      const newTranslateY = lastTranslateY.value + event.nativeEvent.translationY;
+      
+      // Limit panning to image bounds
+      const imageWidth = screenWidth;
+      const imageHeight = screenHeight;
+      const scaledWidth = imageWidth * scaleValue.value;
+      const scaledHeight = imageHeight * scaleValue.value;
+      const maxTranslateX = Math.max(0, (scaledWidth - imageWidth) / 2);
+      const maxTranslateY = Math.max(0, (scaledHeight - imageHeight) / 2);
+      
+      translateX.value = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
+      translateY.value = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
+    } else {
+      // Reset pan if zoomed out
+      translateX.value = 0;
+      translateY.value = 0;
+      lastTranslateX.value = 0;
+      lastTranslateY.value = 0;
+    }
+  };
+  
+  const onPanStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
+      lastTranslateX.value = translateX.value;
+      lastTranslateY.value = translateY.value;
+    }
+  };
+  
+  // Double tap to zoom
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      if (doubleTapTimer.current) {
+        clearTimeout(doubleTapTimer.current);
+        doubleTapTimer.current = null;
+      }
+      
+      if (scaleValue.value > 1) {
+        // Zoom out
+        scaleValue.value = withSpring(1);
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        lastScale.value = 1;
+        lastTranslateX.value = 0;
+        lastTranslateY.value = 0;
+      } else {
+        // Zoom in
+        const newScale = 2.5;
+        scaleValue.value = withSpring(newScale);
+        lastScale.value = newScale;
+      }
+      
+      lastTap.current = null;
+    } else {
+      // First tap - wait for potential second tap
+      lastTap.current = now;
+      doubleTapTimer.current = setTimeout(() => {
+        lastTap.current = null;
+        doubleTapTimer.current = null;
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+  
+  // Animated style for image
+  const animatedImageStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scaleValue.value },
+      ],
+    };
+  });
 
   const addComment = async () => {
     if (!newComment.trim() || !selectedPhoto) {
@@ -579,6 +703,18 @@ export default function PhotoScreen() {
                 <Text style={styles.photoTime}>{item.time}</Text>
               </View>
             </View>
+            {currentUserId && item.user_id === currentUserId && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  deletePhoto(item);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={scale(18)} color={colors.text.light} />
+              </TouchableOpacity>
+            )}
           </View>
           
           <View style={styles.photoFooter}>
@@ -717,11 +853,39 @@ export default function PhotoScreen() {
               <Ionicons name="close" size={scale(30)} color="#FFFFFF" />
             </TouchableOpacity>
             
-            <Image
-              source={{ uri: selectedPhoto.uri }}
-              style={styles.photoModalImage}
-              resizeMode="contain"
-            />
+            <PanGestureHandler
+              ref={panRef}
+              onGestureEvent={onPanEvent}
+              onHandlerStateChange={onPanStateChange}
+              minPointers={1}
+              maxPointers={1}
+              simultaneousHandlers={pinchRef}
+            >
+              <Animated.View style={styles.photoModalImageContainer}>
+                <PinchGestureHandler
+                  ref={pinchRef}
+                  onGestureEvent={onPinchEvent}
+                  onHandlerStateChange={onPinchStateChange}
+                  simultaneousHandlers={panRef}
+                >
+                  <Animated.View style={styles.photoModalImageWrapper}>
+                    <TouchableOpacity
+                      activeOpacity={1}
+                      onPress={handleDoubleTap}
+                      delayPressIn={0}
+                      delayPressOut={0}
+                      style={styles.photoModalImageTouchable}
+                    >
+                      <Animated.Image
+                        source={{ uri: selectedPhoto.uri }}
+                        style={[styles.photoModalImage, animatedImageStyle]}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
+                </PinchGestureHandler>
+              </Animated.View>
+            </PanGestureHandler>
             
             <View style={styles.photoModalInfo}>
               <View style={styles.photoModalUserInfo}>
@@ -736,6 +900,50 @@ export default function PhotoScreen() {
                   <Text style={styles.photoModalUserName}>{selectedPhoto.user}</Text>
                   <Text style={styles.photoModalTime}>{selectedPhoto.time}</Text>
                 </View>
+                {currentUserId && selectedPhoto.user_id === currentUserId && (
+                  <TouchableOpacity
+                    style={styles.photoModalDeleteButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Fotoğrafı Sil',
+                        'Bu fotoğrafı silmek istediğinizden emin misiniz?',
+                        [
+                          { text: 'İptal', style: 'cancel' },
+                          { 
+                            text: 'Sil', 
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                const token = await apiService.getStoredToken();
+                                if (!token) {
+                                  Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+                                  return;
+                                }
+                                
+                                apiService.setToken(token);
+                                
+                                const response = await apiService.delete(`/photos/${selectedPhoto.id}`);
+                                if (response.success) {
+                                  closePhotoModal();
+                                  Alert.alert('Başarılı', 'Fotoğraf silindi');
+                                  await loadPhotos();
+                                } else {
+                                  Alert.alert('Hata', 'Fotoğraf silinirken bir hata oluştu');
+                                }
+                              } catch (error) {
+                                console.error('Delete photo error:', error);
+                                Alert.alert('Hata', 'Fotoğraf silinirken bir hata oluştu');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" size={scale(22)} color={colors.error} />
+                  </TouchableOpacity>
+                )}
               </View>
               
               <View style={styles.photoModalActions}>
@@ -935,6 +1143,16 @@ const styles = StyleSheet.create({
   photoHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  deleteButton: {
+    padding: scale(8),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: scale(20),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   userInfo: {
@@ -1145,11 +1363,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  photoModalImageContainer: {
+    width: screenWidth,
+    height: screenHeight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoModalImageWrapper: {
+    width: screenWidth,
+    height: screenHeight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoModalImageTouchable: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   photoModalImage: {
-    width: screenWidth * 0.95,
-    height: screenHeight * 0.7,
-    maxWidth: scale(400),
-    maxHeight: scale(600),
+    width: screenWidth,
+    height: screenHeight,
   },
   photoModalInfo: {
     position: 'absolute',
@@ -1187,6 +1421,16 @@ const styles = StyleSheet.create({
   },
   photoModalUserDetails: {
     flex: 1,
+  },
+  photoModalDeleteButton: {
+    padding: scale(10),
+    backgroundColor: 'rgba(220, 38, 38, 0.2)',
+    borderRadius: scale(20),
+    borderWidth: 2,
+    borderColor: 'rgba(220, 38, 38, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: scale(12),
   },
   photoModalUserName: {
     fontSize: getResponsiveFontSize(16),

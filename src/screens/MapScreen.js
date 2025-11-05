@@ -1028,8 +1028,8 @@ export default function MapScreen() {
                      description={`${user.distance ? `${Math.round(user.distance)}m uzaklıkta` : 'Yakında'} • ${user.isOnline ? 'Çevrimiçi' : `Son görülme: ${new Date(user.lastSeen).toLocaleTimeString()}`}`}
                      pinColor={colors.secondary}
                    >
-                     <View style={styles.triangleMarker}>
-                       <Ionicons name="triangle" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                     <View style={styles.otherUserMarker}>
+                       <Ionicons name="person" size={isTablet ? 24 : 20} color="#FFFFFF" />
                      </View>
                    </Marker>
                  );

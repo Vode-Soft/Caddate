@@ -240,7 +240,7 @@ const login = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Giriş başarılı',
+      message: 'Hoş geldiniz! Giriş başarılı.',
       data: {
         token,
         user: {

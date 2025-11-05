@@ -13,6 +13,7 @@ import {
   Dimensions,
   Alert,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -219,6 +220,19 @@ export default function ChatScreen({ navigation, route }) {
     };
   }, [handleConnectionError, handleConnectionStatus, handleOnlineUsersList, handleUserJoined, handleUserLeft]);
 
+  // Online kullanıcılar değiştiğinde selectedFriend'in durumunu güncelle
+  useEffect(() => {
+    if (selectedFriend) {
+      const onlineUserIds = new Set(onlineUsers.map(user => user.userId));
+      const isOnline = onlineUserIds.has(selectedFriend.id);
+      setSelectedFriend(prev => ({
+        ...prev,
+        status: isOnline ? 'online' : 'offline',
+        lastSeen: isOnline ? 'Çevrimiçi' : 'Çevrimdışı'
+      }));
+    }
+  }, [onlineUsers, selectedFriend?.id]);
+
   // Component unmount olduğunda socket bağlantısını kapatma
   // Socket bağlantısı global olarak yönetiliyor
   useEffect(() => {
@@ -244,7 +258,20 @@ export default function ChatScreen({ navigation, route }) {
   // Arkadaş listesini döndür
   const getFriendsWithOnlineStatus = () => {
     console.log('getFriendsWithOnlineStatus called, friends count:', friends.length);
-    return friends;
+    console.log('Online users count:', onlineUsers.length);
+    
+    // Online kullanıcı ID'lerini bir set'e çevir (daha hızlı arama için)
+    const onlineUserIds = new Set(onlineUsers.map(user => user.userId));
+    
+    // Her arkadaş için online durumunu kontrol et
+    return friends.map(friend => {
+      const isOnline = onlineUserIds.has(friend.id);
+      return {
+        ...friend,
+        status: isOnline ? 'online' : 'offline',
+        lastSeen: isOnline ? 'Çevrimiçi' : 'Çevrimdışı'
+      };
+    });
   };
 
   // Arkadaş arama fonksiyonu
@@ -398,6 +425,25 @@ export default function ChatScreen({ navigation, route }) {
     
     // Arkadaşın araç bilgilerini yükle
     await loadFriendVehicleInfo(friend.id);
+    
+    // Arkadaşın profil bilgilerini (sosyal medya dahil) yükle
+    try {
+      const token = await apiService.getStoredToken();
+      if (!token) return;
+      
+      apiService.setToken(token);
+      const response = await apiService.getUserProfile(friend.id);
+      
+      if (response.success && response.data) {
+        // Profil bilgilerini selectedFriend'e ekle
+        setSelectedFriend(prev => ({
+          ...prev,
+          profile: response.data.profile
+        }));
+      }
+    } catch (error) {
+      console.error('Profil bilgileri yüklenirken hata:', error);
+    }
   };
 
   // Arkadaşın araç bilgilerini yükle
@@ -720,11 +766,28 @@ export default function ChatScreen({ navigation, route }) {
       onPress={() => viewProfile(item)}
     >
       <View style={styles.friendAvatar}>
-        <Ionicons 
-          name="person" 
-          size={24} 
-          color={colors.text.light} 
-        />
+        {item.profilePicture ? (
+          <Image 
+            source={{ uri: item.profilePicture }} 
+            style={styles.friendAvatarImage}
+            defaultSource={require('../../assets/icon.png')}
+            onError={(error) => {
+              console.log('📸 ChatScreen Friend: Image load error:', error.nativeEvent.error);
+              console.log('📸 ChatScreen Friend: Failed URL:', item.profilePicture);
+            }}
+            onLoad={() => {
+              console.log('📸 ChatScreen Friend: Image loaded successfully:', item.profilePicture);
+            }}
+          />
+        ) : (
+          <View style={styles.friendAvatarDefault}>
+            <Ionicons 
+              name="person" 
+              size={24} 
+              color={colors.text.light} 
+            />
+          </View>
+        )}
         <View style={[
           styles.statusIndicator,
           { backgroundColor: getStatusColor(item.status) }
@@ -880,25 +943,14 @@ export default function ChatScreen({ navigation, route }) {
         >
           <View style={styles.headerTop}>
             <Text style={styles.headerTitle}>Sohbet</Text>
-            <View style={styles.headerRight}>
-              <TouchableOpacity 
-                style={styles.localChatButton}
-                onPress={() => navigation.navigate('LocalChat')}
-              >
-                <Ionicons name="chatbubble-ellipses" size={getResponsiveIconSize(20)} color={colors.text.light} />
-                <Text style={styles.localChatButtonText}>Local Chat</Text>
-              </TouchableOpacity>
-              <View style={styles.connectionStatus}>
-                <View style={[
-                  styles.connectionIndicator,
-                  { backgroundColor: isSocketConnected ? colors.success : colors.warning }
-                ]} />
-                <Text style={styles.connectionText}>
-                  {isSocketConnected ? `Bağlı (${onlineUsers.length} online)` : 'Bağlantı yok'}
-                </Text>
-              </View>
-            </View>
           </View>
+          <TouchableOpacity 
+            style={styles.localChatButton}
+            onPress={() => navigation.navigate('LocalChat')}
+          >
+            <Ionicons name="chatbubble-ellipses" size={getResponsiveIconSize(24)} color={colors.text.light} />
+            <Text style={styles.localChatButtonText}>Local Chat</Text>
+          </TouchableOpacity>
           <View style={styles.tabContainer}>
             <TouchableOpacity
               style={[
@@ -1224,6 +1276,54 @@ export default function ChatScreen({ navigation, route }) {
                     )}
                   </View>
                 )}
+
+                {/* Sosyal Medya Linkleri */}
+                {selectedFriend?.profile?.social_media && (
+                  (selectedFriend.profile.social_media.instagram || selectedFriend.profile.social_media.tiktok) && (
+                    <View style={styles.popupSocialMediaSection}>
+                      <Text style={styles.popupSocialMediaTitle}>Sosyal Medya</Text>
+                      <View style={styles.popupSocialMediaLinks}>
+                        {selectedFriend.profile.social_media.instagram && (
+                          <TouchableOpacity 
+                            style={styles.popupSocialMediaLink}
+                            onPress={() => {
+                              const url = selectedFriend.profile.social_media.instagram.startsWith('http') 
+                                ? selectedFriend.profile.social_media.instagram 
+                                : selectedFriend.profile.social_media.instagram.startsWith('@')
+                                ? `https://instagram.com/${selectedFriend.profile.social_media.instagram.substring(1)}`
+                                : `https://instagram.com/${selectedFriend.profile.social_media.instagram}`;
+                              Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                            }}
+                          >
+                            <Ionicons name="logo-instagram" size={getResponsiveIconSize(24)} color="#E4405F" />
+                            <Text style={styles.popupSocialMediaText} numberOfLines={1}>
+                              {selectedFriend.profile.social_media.instagram}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        
+                        {selectedFriend.profile.social_media.tiktok && (
+                          <TouchableOpacity 
+                            style={styles.popupSocialMediaLink}
+                            onPress={() => {
+                              const url = selectedFriend.profile.social_media.tiktok.startsWith('http') 
+                                ? selectedFriend.profile.social_media.tiktok 
+                                : selectedFriend.profile.social_media.tiktok.startsWith('@')
+                                ? `https://tiktok.com/@${selectedFriend.profile.social_media.tiktok.substring(1)}`
+                                : `https://tiktok.com/@${selectedFriend.profile.social_media.tiktok}`;
+                              Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                            }}
+                          >
+                            <Ionicons name="logo-tiktok" size={getResponsiveIconSize(24)} color="#000000" />
+                            <Text style={styles.popupSocialMediaText} numberOfLines={1}>
+                              {selectedFriend.profile.social_media.tiktok}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  )
+                )}
               </View>
 
               {/* Aksiyon Butonları */}
@@ -1273,44 +1373,30 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
   },
   localChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: getResponsiveBorderRadius(20),
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: getResponsiveBorderRadius(25),
     minHeight: getMinTouchTarget(),
+    marginBottom: spacing.md,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   localChatButtonText: {
     color: colors.text.light,
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.md,
     fontWeight: '600',
     marginLeft: spacing.xs,
-  },
-  connectionStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  connectionIndicator: {
-    width: scale(8),
-    height: scale(8),
-    borderRadius: scale(4),
-    marginRight: spacing.xs,
-  },
-  connectionText: {
-    fontSize: fontSizes.sm,
-    color: colors.text.light,
-    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   headerTitle: {
     fontSize: fontSizes.title,
@@ -1471,6 +1557,14 @@ const styles = StyleSheet.create({
   },
   friendAvatarText: {
     fontSize: getResponsiveIconSize(32),
+  },
+  friendAvatarDefault: {
+    width: getResponsiveIconSize(40),
+    height: getResponsiveIconSize(40),
+    borderRadius: getResponsiveIconSize(20),
+    backgroundColor: colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statusIndicator: {
     position: 'absolute',
@@ -2146,6 +2240,41 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: colors.text.secondary,
     fontWeight: '500',
+  },
+  popupSocialMediaSection: {
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  popupSocialMediaTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  popupSocialMediaLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  popupSocialMediaLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: getResponsiveBorderRadius(15),
+    borderWidth: 1,
+    borderColor: colors.border.light + '30',
+    flex: 1,
+    minWidth: '48%',
+    ...getPlatformShadow(2),
+  },
+  popupSocialMediaText: {
+    fontSize: fontSizes.sm,
+    color: colors.text.primary,
+    marginLeft: spacing.xs,
+    flex: 1,
   },
   popupMoreVehicles: {
     fontSize: fontSizes.sm,

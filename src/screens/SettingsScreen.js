@@ -437,7 +437,7 @@ export default function SettingsScreen({ navigation }) {
             'Profil Görünürlüğü': 'privacy',
             'Online Durumu Göster': 'privacy',
             'Mesaj Alma İzni': 'privacy',
-            'Konum Göster': 'privacy'
+            'Konum Paylaşımı': 'privacy'
           };
           
           const fieldName = fieldMap[title] || title.toLowerCase().replace(/\s+/g, '');
@@ -447,14 +447,22 @@ export default function SettingsScreen({ navigation }) {
             const privacyField = title === 'Profil Görünürlüğü' ? 'profileVisibility' :
                                 title === 'Online Durumu Göster' ? 'showOnlineStatus' :
                                 title === 'Mesaj Alma İzni' ? 'allowMessages' :
-                                title === 'Konum Göster' ? 'showLocation' : null;
+                                title === 'Konum Paylaşımı' ? 'showLocation' : null;
             
             if (privacyField) {
+              // Profil Görünürlüğü için string değer kullan
+              const privacyValue = privacyField === 'profileVisibility' 
+                ? (newValue ? 'public' : 'private')
+                : newValue;
+              
+              // Güncellenmiş privacy objesi oluştur
+              const updatedPrivacy = {
+                ...settings.privacy,
+                [privacyField]: privacyValue
+              };
+              
               saveSettings({
-                privacy: {
-                  ...settings.privacy,
-                  [privacyField]: newValue
-                }
+                privacy: updatedPrivacy
               });
             }
           } else {
@@ -588,17 +596,13 @@ export default function SettingsScreen({ navigation }) {
               'location',
               'Konum Paylaşımı',
               settings.privacy.showLocation,
-              (value) => {
-                const newSettings = {
-                  ...settings, 
-                  privacy: {
-                    ...settings.privacy, 
-                    showLocation: value
-                  }
-                };
-                setSettings(newSettings);
-                saveSettings(newSettings);
-              },
+              (value) => setSettings({
+                ...settings, 
+                privacy: {
+                  ...settings.privacy, 
+                  showLocation: value
+                }
+              }),
               colors.primary
             )}
           </View>

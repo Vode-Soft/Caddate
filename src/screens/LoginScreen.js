@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Alert,
   StatusBar,
   Dimensions,
+  Animated,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +35,12 @@ export default function LoginScreen({ navigation, onAuthentication }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
+  // Animasyon değerleri
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const checkmarkAnim = useRef(new Animated.Value(0)).current;
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -56,14 +64,17 @@ export default function LoginScreen({ navigation, onAuthentication }) {
         // Token'ı kaydet
         apiService.setToken(response.data.token);
         
-        Alert.alert('Başarılı', response.message, [
-          { text: 'Tamam', onPress: () => {
-            // Authentication state'ini güncelle
-            if (onAuthentication) {
-              onAuthentication(true);
-            }
-          }}
-        ]);
+        // Modern başarı modalını göster
+        setShowSuccessModal(true);
+        startSuccessAnimation();
+        
+        // 2 saniye sonra otomatik kapat ve ana ekrana yönlendir
+        setTimeout(() => {
+          setShowSuccessModal(false);
+          if (onAuthentication) {
+            onAuthentication(true);
+          }
+        }, 2000);
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -87,6 +98,40 @@ export default function LoginScreen({ navigation, onAuthentication }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const startSuccessAnimation = () => {
+    // Animasyonları sıfırla
+    scaleAnim.setValue(0);
+    fadeAnim.setValue(0);
+    checkmarkAnim.setValue(0);
+
+    // Paralel animasyonlar
+    Animated.parallel([
+      // Modal fade in
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      // Scale animasyonu
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      // Checkmark animasyonu
+      Animated.sequence([
+        Animated.delay(200),
+        Animated.spring(checkmarkAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
   };
 
   const handleResendVerificationEmail = async () => {
@@ -205,6 +250,80 @@ export default function LoginScreen({ navigation, onAuthentication }) {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Modern Başarı Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <Animated.View
+          style={[
+            styles.modalOverlay,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.successModalContainer,
+              {
+                transform: [
+                  {
+                    scale: scaleAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={colors.gradients.redBlack}
+              style={styles.successModalGradient}
+            >
+              {/* Başarı İkonu */}
+              <View style={styles.successIconContainer}>
+                <Animated.View
+                  style={[
+                    styles.checkmarkCircle,
+                    {
+                      transform: [
+                        {
+                          scale: checkmarkAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="checkmark"
+                    size={60}
+                    color={colors.text.primary}
+                  />
+                </Animated.View>
+              </View>
+
+              {/* Başlık */}
+              <Text style={styles.successTitle}>Hoş Geldiniz!</Text>
+              
+              {/* Mesaj */}
+              <Text style={styles.successMessage}>
+                Giriş başarılı
+              </Text>
+
+              {/* Alt çizgi */}
+              <View style={styles.successUnderline} />
+            </LinearGradient>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -316,5 +435,65 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Modern Başarı Modal Stilleri
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModalContainer: {
+    width: '85%',
+    maxWidth: 400,
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  successModalGradient: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successIconContainer: {
+    marginBottom: 25,
+  },
+  checkmarkCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.text.primary,
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text.primary,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 18,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '500',
+  },
+  successUnderline: {
+    width: 60,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+    marginTop: 10,
   },
 });

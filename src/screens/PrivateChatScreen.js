@@ -15,6 +15,7 @@ import {
   Modal,
   ScrollView,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -184,6 +185,11 @@ export default function PrivateChatScreen({ navigation, route }) {
         // Profil fotoğrafı URL'sini tam URL'ye çevir
         const profileData = apiService.normalizeUserData(response.data);
         
+        // Profile bilgisini de ekle
+        if (response.data.profile) {
+          profileData.profile = response.data.profile;
+        }
+        
         setFriendProfile(profileData);
         setShowProfileModal(true);
       } else {
@@ -232,7 +238,11 @@ export default function PrivateChatScreen({ navigation, route }) {
               console.log('🗑️ PrivateChatScreen: Sohbet temizlendi');
               
               // ChatScreen'e geri dön ve listeyi yenile
-              navigation.navigate('Chat', { refreshConversations: true });
+              // Chat ekranı Tab Navigator içinde olduğu için nested navigator syntax kullanıyoruz
+              navigation.navigate('Main', { 
+                screen: 'Chat', 
+                params: { refreshConversations: true } 
+              });
             } catch (error) {
               console.error('🗑️ PrivateChatScreen: Sohbet temizleme hatası:', error);
               Alert.alert('Hata', 'Sohbet temizlenirken bir hata oluştu');
@@ -658,10 +668,8 @@ export default function PrivateChatScreen({ navigation, route }) {
               <Ionicons name="arrow-back" size={24} color={colors.text.light} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <TouchableOpacity 
+              <View 
                 style={styles.headerUserInfo}
-                onPress={loadFriendProfile}
-                disabled={isLoadingProfile}
               >
                 {friend.profilePicture ? (
                   <Image
@@ -687,7 +695,7 @@ export default function PrivateChatScreen({ navigation, route }) {
                     {isLoadingProfile ? 'Yükleniyor...' : (isSocketConnected ? 'Çevrimiçi' : 'Çevrimdışı')}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.headerSpacer} />
           </View>
@@ -896,6 +904,54 @@ export default function PrivateChatScreen({ navigation, route }) {
                       </Text>
                     </View>
                   </View>
+
+                  {/* Sosyal Medya Linkleri */}
+                  {friendProfile.profile?.social_media && (
+                    (friendProfile.profile.social_media.instagram || friendProfile.profile.social_media.tiktok) && (
+                      <View style={styles.modalSocialMediaSection}>
+                        <Text style={styles.modalSocialMediaTitle}>Sosyal Medya</Text>
+                        <View style={styles.modalSocialMediaLinks}>
+                          {friendProfile.profile.social_media.instagram && (
+                            <TouchableOpacity 
+                              style={styles.modalSocialMediaLink}
+                              onPress={() => {
+                                const url = friendProfile.profile.social_media.instagram.startsWith('http') 
+                                  ? friendProfile.profile.social_media.instagram 
+                                  : friendProfile.profile.social_media.instagram.startsWith('@')
+                                  ? `https://instagram.com/${friendProfile.profile.social_media.instagram.substring(1)}`
+                                  : `https://instagram.com/${friendProfile.profile.social_media.instagram}`;
+                                Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                              }}
+                            >
+                              <Ionicons name="logo-instagram" size={24} color="#E4405F" />
+                              <Text style={styles.modalSocialMediaText} numberOfLines={1}>
+                                {friendProfile.profile.social_media.instagram}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          
+                          {friendProfile.profile.social_media.tiktok && (
+                            <TouchableOpacity 
+                              style={styles.modalSocialMediaLink}
+                              onPress={() => {
+                                const url = friendProfile.profile.social_media.tiktok.startsWith('http') 
+                                  ? friendProfile.profile.social_media.tiktok 
+                                  : friendProfile.profile.social_media.tiktok.startsWith('@')
+                                  ? `https://tiktok.com/@${friendProfile.profile.social_media.tiktok.substring(1)}`
+                                  : `https://tiktok.com/@${friendProfile.profile.social_media.tiktok}`;
+                                Linking.openURL(url).catch(err => Alert.alert('Hata', 'Link açılamadı'));
+                              }}
+                            >
+                              <Ionicons name="logo-tiktok" size={24} color="#000000" />
+                              <Text style={styles.modalSocialMediaText} numberOfLines={1}>
+                                {friendProfile.profile.social_media.tiktok}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    )
+                  )}
                 </>
               ) : (
                 <View style={styles.modalLoadingContainer}>
@@ -1351,6 +1407,42 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightGray,
     borderRadius: 8,
     marginBottom: 8,
+  },
+  modalSocialMediaSection: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  modalSocialMediaTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalSocialMediaLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  modalSocialMediaLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary || colors.background,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: colors.border?.light + '30' || colors.lightGray + '30',
+    flex: 1,
+    minWidth: '48%',
+    marginBottom: 8,
+  },
+  modalSocialMediaText: {
+    fontSize: 14,
+    color: colors.text.primary,
+    marginLeft: 8,
+    flex: 1,
   },
   modalInfoText: {
     fontSize: 14,
