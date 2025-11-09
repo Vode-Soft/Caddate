@@ -545,6 +545,42 @@ const clearPrivateChat = async (req, res) => {
   }
 };
 
+// Local Chat mesajlarını temizle (2 saatten eski mesajları sil)
+const clearOldLocalChatMessages = async () => {
+  try {
+    // 2 saat öncesini hesapla
+    const twoHoursAgo = new Date();
+    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+
+    console.log(`🧹 Local Chat temizleniyor - 2 saatten eski mesajlar siliniyor (${twoHoursAgo.toISOString()})`);
+
+    // Genel sohbet mesajlarını sil (receiver_id IS NULL ve 2 saatten eski)
+    const query = `
+      DELETE FROM messages 
+      WHERE receiver_id IS NULL 
+        AND created_at < $1
+    `;
+    
+    const result = await pool.query(query, [twoHoursAgo]);
+    
+    const deletedCount = result.rowCount || 0;
+    console.log(`✅ Local Chat temizlendi - ${deletedCount} mesaj silindi`);
+
+    return {
+      success: true,
+      deletedCount: deletedCount,
+      clearedAt: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('❌ Local Chat temizleme hatası:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 module.exports = {
   getMessageHistory,
   sendMessage,
@@ -553,5 +589,6 @@ module.exports = {
   getPrivateMessageHistory,
   sendPrivateMessage,
   getPrivateConversations,
-  clearPrivateChat
+  clearPrivateChat,
+  clearOldLocalChatMessages
 };

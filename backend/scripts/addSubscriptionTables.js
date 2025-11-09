@@ -132,17 +132,42 @@ const addSubscriptionTables = async () => {
     await pool.query(createIndexesQuery);
     console.log('✅ İndexler oluşturuldu');
 
-    // 7. Trigger'lar oluştur
+    // 7. update_updated_at_column fonksiyonunu oluştur (eğer yoksa)
+    const createFunctionQuery = `
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `;
+
+    try {
+      await pool.query(createFunctionQuery);
+      console.log('✅ update_updated_at_column fonksiyonu oluşturuldu');
+    } catch (funcError) {
+      // Fonksiyon zaten varsa hata verme
+      if (funcError.code !== '42710') {
+        console.warn('⚠️  Fonksiyon oluşturulurken uyarı:', funcError.message);
+      }
+    }
+
+    // 8. Trigger'lar oluştur
     const createTriggersQuery = `
+      DROP TRIGGER IF EXISTS update_subscription_plans_updated_at ON subscription_plans;
       CREATE TRIGGER update_subscription_plans_updated_at BEFORE UPDATE ON subscription_plans
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
         
+      DROP TRIGGER IF EXISTS update_user_subscriptions_updated_at ON user_subscriptions;
       CREATE TRIGGER update_user_subscriptions_updated_at BEFORE UPDATE ON user_subscriptions
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
         
+      DROP TRIGGER IF EXISTS update_payment_history_updated_at ON payment_history;
       CREATE TRIGGER update_payment_history_updated_at BEFORE UPDATE ON payment_history
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
         
+      DROP TRIGGER IF EXISTS update_feature_usage_updated_at ON feature_usage;
       CREATE TRIGGER update_feature_usage_updated_at BEFORE UPDATE ON feature_usage
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     `;
@@ -150,7 +175,7 @@ const addSubscriptionTables = async () => {
     await pool.query(createTriggersQuery);
     console.log('✅ Trigger\'lar oluşturuldu');
 
-    // 8. Örnek abonelik planları ekle
+    // 9. Örnek abonelik planları ekle
     const insertPlansQuery = `
       INSERT INTO subscription_plans (name, name_tr, description, description_tr, price, duration_days, features, is_popular, display_order)
       VALUES 

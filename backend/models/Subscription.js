@@ -325,7 +325,8 @@ class Subscription {
         throw new Error('Kullanıcı ID gerekli');
       }
 
-      const query = `
+      // Önce kolonların varlığını kontrol et, yoksa varsayılan değerler döndür
+      let query = `
         SELECT 
           is_premium,
           premium_until,
@@ -343,24 +344,51 @@ class Subscription {
 
       // Premium süresi geçmişse güncelle
       if (user.is_premium && user.premium_until && new Date(user.premium_until) < new Date()) {
-        const updateQuery = `
-          UPDATE users 
-          SET is_premium = false, premium_until = NULL, premium_features = '{}'::jsonb
-          WHERE id = $1
-        `;
-        await pool.query(updateQuery, [userId]);
+        try {
+          // Önce premium_features kolonunun varlığını kontrol et
+          let updateQuery = `
+            UPDATE users 
+            SET is_premium = false, premium_until = NULL
+            WHERE id = $1
+          `;
+          
+          // Eğer premium_features kolonu varsa, onu da güncelle
+          try {
+            updateQuery = `
+              UPDATE users 
+              SET is_premium = false, premium_until = NULL, premium_features = '{}'::jsonb
+              WHERE id = $1
+            `;
+            await pool.query(updateQuery, [userId]);
+          } catch (colError) {
+            // Eğer premium_features kolonu yoksa, sadece diğer kolonları güncelle
+            if (colError.code === '42703') {
+              updateQuery = `
+                UPDATE users 
+                SET is_premium = false, premium_until = NULL
+                WHERE id = $1
+              `;
+              await pool.query(updateQuery, [userId]);
+            } else {
+              throw colError;
+            }
+          }
+        } catch (updateError) {
+          // Güncelleme hatası kritik değil, sadece logla
+          console.warn('Error updating expired premium status:', updateError.message);
+        }
         
         return { isPremium: false, premiumUntil: null, features: {} };
       }
 
       // premium_features'i güvenli şekilde işle
       let features = {};
-      if (user.premium_features) {
+      if (user.premium_features !== undefined && user.premium_features !== null) {
         if (typeof user.premium_features === 'string') {
           try {
             features = JSON.parse(user.premium_features);
           } catch (parseError) {
-            console.error('Error parsing premium_features:', parseError);
+            console.warn('Error parsing premium_features:', parseError.message);
             features = {};
           }
         } else if (typeof user.premium_features === 'object') {
@@ -370,7 +398,7 @@ class Subscription {
 
       return {
         isPremium: user.is_premium || false,
-        premiumUntil: user.premium_until,
+        premiumUntil: user.premium_until || null,
         features: features
       };
     } catch (error) {
@@ -382,6 +410,13 @@ class Subscription {
         hint: error.hint,
         stack: error.stack
       });
+      
+      // Eğer kolon yoksa (42P01 veya 42703 hatası), varsayılan değerler döndür
+      if (error.code === '42P01' || error.code === '42703') {
+        console.warn('⚠️  Premium kolonları bulunamadı, varsayılan değerler döndürülüyor');
+        return { isPremium: false, premiumUntil: null, features: {} };
+      }
+      
       throw error;
     }
   }
@@ -402,8 +437,15 @@ class Subscription {
       const result = await pool.query(query, [userId, featureName]);
       return result.rows[0];
     } catch (error) {
-      console.error('Error tracking feature usage:', error);
-      throw error;
+      // Eğer tablo yoksa (42P01 hatası), sessizce devam et (kritik değil)
+      if (error.code === '42P01') {
+        console.warn('⚠️  feature_usage tablosu bulunamadı, tracking atlanıyor');
+        return null;
+      }
+      
+      // Diğer hatalar için logla ama fırlatma (tracking kritik değil)
+      console.warn('Error tracking feature usage (non-critical):', error.message);
+      return null;
     }
   }
 
@@ -433,6 +475,18 @@ class Subscription {
   // ADMIN: Tüm abonelikleri getir
   static async getAllSubscriptions(status = null, limit = 100, offset = 0) {
     try {
+      // Önce toplam sayıyı al
+      let countQuery = `
+        SELECT COUNT(*) as total
+        FROM user_subscriptions us
+        ${status ? 'WHERE us.status = $1' : ''}
+      `;
+      
+      const countParams = status ? [status] : [];
+      const countResult = await pool.query(countQuery, countParams);
+      const total = parseInt(countResult.rows[0].total) || 0;
+
+      // Sonra sayfalanmış verileri al
       let query = `
         SELECT 
           us.*,
@@ -451,9 +505,33 @@ class Subscription {
       
       const params = status ? [status, limit, offset] : [limit, offset];
       const result = await pool.query(query, params);
-      return result.rows;
+      
+      return {
+        subscriptions: result.rows,
+        total: total
+      };
     } catch (error) {
+      // Eğer tablo yoksa (42P01 hatası), boş sonuç döndür
+      const errorCode = error?.code;
+      const errorMessage = error?.message ? String(error.message) : '';
+      const isTableNotFound = 
+        errorCode === '42P01' || 
+        errorMessage.toLowerCase().includes('does not exist') || 
+        errorMessage.toLowerCase().includes('user_subscriptions') ||
+        (error && String(error).includes('does not exist'));
+      
+      if (isTableNotFound) {
+        console.warn('⚠️  user_subscriptions tablosu bulunamadı, boş sonuç döndürülüyor');
+        return {
+          subscriptions: [],
+          total: 0
+        };
+      }
+      
+      // Eğer tablo bulunamadı hatası değilse, hatayı fırlat
       console.error('Error getting all subscriptions:', error);
+      console.error('Error code:', errorCode);
+      console.error('Error message:', errorMessage);
       throw error;
     }
   }
@@ -461,22 +539,82 @@ class Subscription {
   // ADMIN: İstatistikler
   static async getStats() {
     try {
-      const statsQuery = `
+      // Önce user_subscriptions tablosundan istatistikleri al
+      const subscriptionsStatsQuery = `
         SELECT 
-          COUNT(DISTINCT us.user_id) FILTER (WHERE us.status = 'active' AND us.end_date > NOW()) as active_subscribers,
-          COUNT(*) FILTER (WHERE us.status = 'active' AND us.end_date > NOW()) as active_subscriptions,
-          COUNT(*) FILTER (WHERE us.status = 'expired') as expired_subscriptions,
-          COUNT(*) FILTER (WHERE us.status = 'cancelled') as cancelled_subscriptions,
-          SUM(ph.amount) FILTER (WHERE ph.status = 'completed' AND ph.created_at >= NOW() - INTERVAL '30 days') as revenue_last_30_days,
-          SUM(ph.amount) FILTER (WHERE ph.status = 'completed') as total_revenue
-        FROM user_subscriptions us
-        LEFT JOIN payment_history ph ON us.id = ph.subscription_id
+          COUNT(DISTINCT user_id) FILTER (WHERE status = 'active' AND end_date > NOW()) as active_subscribers,
+          COUNT(*) FILTER (WHERE status = 'active' AND end_date > NOW()) as active_subscriptions,
+          COUNT(*) FILTER (WHERE status = 'expired') as expired_subscriptions,
+          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_subscriptions
+        FROM user_subscriptions
       `;
       
-      const result = await pool.query(statsQuery);
-      return result.rows[0];
+      const subscriptionsResult = await pool.query(subscriptionsStatsQuery);
+      const subscriptionsStats = subscriptionsResult.rows[0] || {};
+
+      // Sonra payment_history tablosundan gelir istatistiklerini al (tablo yoksa hata vermesin)
+      let revenueStats = { revenue_last_30_days: 0, total_revenue: 0 };
+      try {
+        const revenueQuery = `
+          SELECT 
+            COALESCE(SUM(amount) FILTER (WHERE status = 'completed' AND created_at >= NOW() - INTERVAL '30 days'), 0) as revenue_last_30_days,
+            COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0) as total_revenue
+          FROM payment_history
+        `;
+        const revenueResult = await pool.query(revenueQuery);
+        revenueStats = revenueResult.rows[0] || revenueStats;
+      } catch (revenueError) {
+        // payment_history tablosu yoksa, sadece logla ve devam et
+        const revenueErrorCode = revenueError?.code;
+        const revenueErrorMessage = revenueError?.message ? String(revenueError.message) : '';
+        const isTableNotFound = 
+          revenueErrorCode === '42P01' || 
+          revenueErrorMessage.toLowerCase().includes('does not exist') || 
+          revenueErrorMessage.toLowerCase().includes('payment_history') ||
+          (revenueError && String(revenueError).includes('does not exist'));
+        
+        if (isTableNotFound) {
+          console.warn('⚠️  payment_history tablosu bulunamadı, gelir istatistikleri 0 olarak ayarlandı');
+        } else {
+          console.warn('⚠️  Gelir istatistikleri alınırken hata:', revenueErrorMessage);
+        }
+      }
+      
+      // Tüm değerleri birleştir ve null değerleri 0'a çevir
+      return {
+        active_subscribers: parseInt(subscriptionsStats.active_subscribers) || 0,
+        active_subscriptions: parseInt(subscriptionsStats.active_subscriptions) || 0,
+        expired_subscriptions: parseInt(subscriptionsStats.expired_subscriptions) || 0,
+        cancelled_subscriptions: parseInt(subscriptionsStats.cancelled_subscriptions) || 0,
+        revenue_last_30_days: parseFloat(revenueStats.revenue_last_30_days) || 0,
+        total_revenue: parseFloat(revenueStats.total_revenue) || 0
+      };
     } catch (error) {
+      // Eğer user_subscriptions tablosu yoksa (42P01 hatası), boş istatistik döndür
+      const errorCode = error?.code;
+      const errorMessage = error?.message ? String(error.message) : '';
+      const isTableNotFound = 
+        errorCode === '42P01' || 
+        errorMessage.toLowerCase().includes('does not exist') || 
+        errorMessage.toLowerCase().includes('user_subscriptions') ||
+        (error && String(error).includes('does not exist'));
+      
+      if (isTableNotFound) {
+        console.warn('⚠️  user_subscriptions tablosu bulunamadı, boş istatistik döndürülüyor');
+        return {
+          active_subscribers: 0,
+          active_subscriptions: 0,
+          expired_subscriptions: 0,
+          cancelled_subscriptions: 0,
+          revenue_last_30_days: 0,
+          total_revenue: 0
+        };
+      }
+      
+      // Eğer tablo bulunamadı hatası değilse, hatayı fırlat
       console.error('Error getting subscription stats:', error);
+      console.error('Error code:', errorCode);
+      console.error('Error message:', errorMessage);
       throw error;
     }
   }

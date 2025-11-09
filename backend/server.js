@@ -46,6 +46,9 @@ const antiSpamRoutes = require('./routes/antiSpam');
 const verificationRoutes = require('./routes/verification');
 const reportingRoutes = require('./routes/reporting');
 
+// Import chat controller for scheduled tasks
+const { clearOldLocalChatMessages } = require('./controllers/chatController');
+
 // Import models
 const Activity = require('./models/Activity');
 
@@ -916,6 +919,31 @@ const startServer = async () => {
       console.log(`   - Email: http://localhost:${PORT}/api/email`);
       console.log(`   - Health: http://localhost:${PORT}/health`);
       console.log(`   - Socket.io: ws://localhost:${PORT}`);
+      
+      // Local Chat temizleme görevini başlat (2 saatte bir)
+      console.log(`🕐 Local Chat otomatik temizleme başlatıldı (2 saatte bir)`);
+      
+      // İlk temizlemeyi hemen yap (opsiyonel - sunucu başladığında eski mesajları temizle)
+      clearOldLocalChatMessages().then(result => {
+        if (result.success) {
+          console.log(`✅ İlk Local Chat temizleme tamamlandı - ${result.deletedCount} mesaj silindi`);
+        }
+      }).catch(error => {
+        console.error(`❌ İlk Local Chat temizleme hatası:`, error);
+      });
+      
+      // Her 2 saatte bir temizleme yap (2 saat = 2 * 60 * 60 * 1000 = 7200000 ms)
+      const CLEANUP_INTERVAL = 2 * 60 * 60 * 1000; // 2 saat
+      setInterval(async () => {
+        const result = await clearOldLocalChatMessages();
+        if (result.success) {
+          console.log(`✅ Zamanlanmış Local Chat temizleme tamamlandı - ${result.deletedCount} mesaj silindi`);
+        } else {
+          console.error(`❌ Zamanlanmış Local Chat temizleme hatası:`, result.error);
+        }
+      }, CLEANUP_INTERVAL);
+      
+      console.log(`⏰ Local Chat temizleme zamanlayıcısı ayarlandı: Her ${CLEANUP_INTERVAL / 1000 / 60} dakikada bir`);
     });
   } catch (error) {
     console.error('❌ Server başlatılamadı:', error.message);

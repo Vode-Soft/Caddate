@@ -266,19 +266,21 @@ exports.checkPremiumStatus = async (req, res) => {
 // ADMIN: Tüm abonelikleri getir
 exports.getAllSubscriptions = async (req, res) => {
   try {
-    const status = req.query.status;
-    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500
-    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const status = req.query.status || null;
+    const page = Math.max(parseInt(req.query.page) || 1, 1); // Min 1
+    const limit = Math.min(parseInt(req.query.limit) || 25, 500); // Max 500, default 25
+    const offset = (page - 1) * limit;
     
-    const subscriptions = await Subscription.getAllSubscriptions(status, limit, offset);
+    const result = await Subscription.getAllSubscriptions(status, limit, offset);
     
     res.json({
       success: true,
-      subscriptions: subscriptions || [],
+      subscriptions: result.subscriptions || [],
       pagination: {
+        page,
         limit,
-        offset,
-        total: subscriptions?.length || 0
+        total: result.total || 0,
+        totalPages: Math.ceil((result.total || 0) / limit)
       }
     });
   } catch (error) {

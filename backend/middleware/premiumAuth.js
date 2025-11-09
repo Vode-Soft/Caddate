@@ -27,9 +27,36 @@ const requirePremium = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Premium auth error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      stack: error.stack
+    });
+    
+    // Veritabanı hatası kontrolü
+    if (error.code === '42P01') {
+      return res.status(500).json({
+        success: false,
+        message: 'Veritabanı tablosu bulunamadı. Lütfen sistem yöneticisine başvurun.',
+        error: 'Database table not found'
+      });
+    }
+    
+    // Diğer veritabanı hataları
+    if (error.code && error.code.startsWith('42')) {
+      return res.status(500).json({
+        success: false,
+        message: 'Veritabanı hatası oluştu',
+        error: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Yetkilendirme hatası'
+      message: 'Yetkilendirme hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -72,15 +99,47 @@ const requirePremiumFeature = (featureName) => {
       // Premium bilgilerini request'e ekle
       req.premiumStatus = premiumStatus;
       
-      // Özellik kullanımını kaydet
-      await Subscription.trackFeatureUsage(userId, featureName);
+      // Özellik kullanımını kaydet (kritik değil, hata olsa bile devam et)
+      try {
+        await Subscription.trackFeatureUsage(userId, featureName);
+      } catch (trackError) {
+        // Tracking hatası kritik değil, sadece logla ve devam et
+        console.warn('Feature usage tracking error (non-critical):', trackError.message);
+      }
       
       next();
     } catch (error) {
       console.error('Premium feature auth error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack
+      });
+      
+      // Veritabanı hatası kontrolü
+      if (error.code === '42P01') {
+        return res.status(500).json({
+          success: false,
+          message: 'Veritabanı tablosu bulunamadı. Lütfen sistem yöneticisine başvurun.',
+          error: 'Database table not found'
+        });
+      }
+      
+      // Diğer veritabanı hataları
+      if (error.code && error.code.startsWith('42')) {
+        return res.status(500).json({
+          success: false,
+          message: 'Veritabanı hatası oluştu',
+          error: error.message
+        });
+      }
+      
       res.status(500).json({
         success: false,
-        message: 'Yetkilendirme hatası'
+        message: 'Yetkilendirme hatası',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   };
@@ -119,9 +178,36 @@ const requirePremiumOrAdmin = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Premium or admin auth error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      stack: error.stack
+    });
+    
+    // Veritabanı hatası kontrolü
+    if (error.code === '42P01') {
+      return res.status(500).json({
+        success: false,
+        message: 'Veritabanı tablosu bulunamadı. Lütfen sistem yöneticisine başvurun.',
+        error: 'Database table not found'
+      });
+    }
+    
+    // Diğer veritabanı hataları
+    if (error.code && error.code.startsWith('42')) {
+      return res.status(500).json({
+        success: false,
+        message: 'Veritabanı hatası oluştu',
+        error: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Yetkilendirme hatası'
+      message: 'Yetkilendirme hatası',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
